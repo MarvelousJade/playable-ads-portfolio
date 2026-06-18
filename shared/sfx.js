@@ -92,7 +92,7 @@
     isMuted: function () { return muted; },
 
     click: function () { tone({ type: 'square', freq: 660, freqTo: 320, dur: 0.07, vol: 0.18 }); },
-    tick: function () { tone({ type: 'square', freq: 880, dur: 0.03, vol: 0.08 }); },
+    tick: function () { tone({ type: 'square', freq: 1000, freqTo: 520, dur: 0.035, vol: 0.13 }); },
     reelStop: function () { tone({ type: 'sine', freq: 420, freqTo: 150, dur: 0.13, vol: 0.3 }); },
     whoosh: function () { noise({ filter: 'bandpass', freq: 1200, q: 0.7, dur: 0.35, vol: 0.18 }); },
 
@@ -104,17 +104,19 @@
       var osc = c.createOscillator();
       var lfo = c.createOscillator();
       var lfoGain = c.createGain();
+      var lp = c.createBiquadFilter();
       var g = c.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.value = 90;
-      lfo.frequency.value = 18;       // flutter rate
-      lfoGain.gain.value = 30;
+      osc.type = 'triangle';            // softer than sawtooth — less "white noise"
+      osc.frequency.value = 115;
+      lfo.frequency.value = 24;         // gentle mechanical flutter
+      lfoGain.gain.value = 12;
+      lp.type = 'lowpass'; lp.frequency.value = 850;   // tame the harshness
       g.gain.value = 0.0001;
       lfo.connect(lfoGain);
       lfoGain.connect(osc.frequency);
-      osc.connect(g);
+      osc.connect(lp); lp.connect(g);
       g.connect(master);
-      g.gain.exponentialRampToValueAtTime(0.12, c.currentTime + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.08, c.currentTime + 0.08);
       osc.start();
       lfo.start();
       spinNodes = { osc: osc, lfo: lfo, g: g };
@@ -139,7 +141,29 @@
       for (var i = 0; i < 6; i++) tone({ type: 'sine', freq: 1568 + i * 220, dur: 0.12, vol: 0.12, delay: 0.5 + i * 0.05 });
     },
     lose: function () { tone({ type: 'sawtooth', freq: 300, freqTo: 110, dur: 0.4, vol: 0.22 }); },
-    scratch: function () { noise({ filter: 'highpass', freq: 2600, q: 0.5, dur: 0.08, vol: 0.12 }); }
+    // gritty, granular "scrrtch" that sweeps down with resonance — reads as a
+    // coin dragging across foil rather than a thin hiss. Randomised per stroke.
+    scratch: function () {
+      if (muted) return;
+      var c = ensure();
+      if (!c) return;
+      var t0 = c.currentTime, dur = 0.12;
+      var frames = Math.floor(c.sampleRate * dur);
+      var buf = c.createBuffer(1, frames, c.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < frames; i++) {
+        var env = 1 - i / frames;
+        var grain = 0.55 + 0.45 * Math.sin(i * 0.7);   // granular drag texture
+        d[i] = (Math.random() * 2 - 1) * env * grain;
+      }
+      var src = c.createBufferSource(); src.buffer = buf;
+      var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 4.5;
+      bp.frequency.setValueAtTime(2300 + Math.random() * 700, t0);
+      bp.frequency.exponentialRampToValueAtTime(950, t0 + dur);
+      var g = c.createGain(); g.gain.value = 0.15;
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start(t0); src.stop(t0 + dur);
+    }
   };
 
   global.SFX = SFX;

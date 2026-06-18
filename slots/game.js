@@ -287,6 +287,12 @@
       btn.setInteractive(new Phaser.Geom.Rectangle(-150, -58, 300, 116), Phaser.Geom.Rectangle.Contains);
       btn.on('pointerdown', this.onSpinPressed, this);
 
+      // Robust fallback: tap anywhere on the machine (below the HUD) to spin.
+      // Touch-friendly and avoids first-tap hit-test misses on the container.
+      this.input.on('pointerdown', function (pointer) {
+        if (pointer.y > 240) this.onSpinPressed();
+      }, this);
+
       this.spinBtn = btn; this.spinSub = sub; this.spinLabel = label;
       // attract pulse
       this.btnPulse = this.tweens.add({ targets: btn, scale: 1.07, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.inOut' });

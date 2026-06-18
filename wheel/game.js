@@ -235,8 +235,7 @@
     var delta = (((base - fromMod) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     var to = from + Math.PI * 2 * 5 + delta;   // 5 full turns + settle
 
-    SFX.spinStart();
-    var lastSeg = -1;
+    var lastSeg = -1;   // wheel uses per-segment ticks (below) — no continuous whir
     animate(4200, easeOutQuart,
       function (e) {
         wheel.rotation = from + (to - from) * e;
@@ -245,7 +244,7 @@
         var seg = Math.floor(localAtPointer / STEP);
         if (seg !== lastSeg) { lastSeg = seg; SFX.tick(); }
       },
-      function () { SFX.spinStop(); onLand(outcome); }
+      function () { onLand(outcome); }
     );
   }
 
