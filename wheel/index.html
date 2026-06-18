@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Spin to Win — Playable Ad</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden; background: #120a26;
+      -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent; touch-action: none;
+    }
+    #game { position: fixed; inset: 0; }
+    #loader {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: #ffd23c; letter-spacing: .2em; font-size: 14px; z-index: 5;
+      background: #120a26; font-family: Arial, sans-serif;
+    }
+    #loader.hide { opacity: 0; pointer-events: none; transition: opacity .4s; }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="loader">LOADING…</div>
+
+  <script src="../vendor/pixi.min.js"></script>
+  <script src="../shared/sfx.js"></script>
+  <script src="../shared/playable.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

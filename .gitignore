@@ -1,0 +1,8 @@
+# dependencies (Playwright is large — only needed for headless testing)
+node_modules/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.log
+.vscode/

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Playable Ads Portfolio — Social Casino</title>
+  <style>
+    :root { --gold:#ffd86b; --gold2:#f4a300; --bg:#0a0814; --card:#171127; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #2a1652 0%, var(--bg) 60%);
+      color: #ece7f5; min-height: 100vh; padding: 48px 20px 80px;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 14px; }
+    .kicker { letter-spacing: .32em; font-size: 13px; color: var(--gold); text-transform: uppercase; }
+    h1 { font-size: clamp(30px, 6vw, 52px); margin: 12px 0 10px;
+      background: linear-gradient(180deg, #fff5d6, var(--gold2)); -webkit-background-clip: text;
+      background-clip: text; color: transparent; font-weight: 900; }
+    .sub { color: #b9b2cc; max-width: 680px; margin: 0 auto; line-height: 1.55; font-size: 17px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-top: 44px; }
+    .card {
+      background: linear-gradient(180deg, var(--card), #110c1f);
+      border: 1px solid rgba(255,216,107,.18); border-radius: 18px; overflow: hidden;
+      display: flex; flex-direction: column; transition: transform .15s, box-shadow .15s, border-color .15s;
+    }
+    .card:hover { transform: translateY(-5px); box-shadow: 0 18px 40px rgba(0,0,0,.45); border-color: rgba(255,216,107,.5); }
+    .thumb { aspect-ratio: 9 / 13; position: relative; overflow: hidden;
+      background: linear-gradient(160deg, #2a1652, #0a0814); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .badge { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,.6);
+      border: 1px solid rgba(255,216,107,.35); color: var(--gold); font-size: 12px; font-weight: 700;
+      padding: 5px 10px; border-radius: 999px; letter-spacing: .06em; backdrop-filter: blur(4px); }
+    .body { padding: 18px 18px 22px; flex: 1; display: flex; flex-direction: column; }
+    .body h2 { font-size: 22px; font-weight: 800; }
+    .body p { color: #b1aac6; font-size: 14.5px; line-height: 1.5; margin: 8px 0 16px; flex: 1; }
+    .play { display: block; text-align: center; text-decoration: none; font-weight: 800;
+      padding: 13px; border-radius: 12px; color: #0c2a13;
+      background: linear-gradient(180deg, #4be07a, #19a445); box-shadow: 0 6px 0 #0e6b2a; }
+    .play:active { transform: translateY(3px); box-shadow: 0 3px 0 #0e6b2a; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .tag { font-size: 11.5px; color: #d8cff0; background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.08); padding: 3px 9px; border-radius: 999px; }
+    footer { text-align: center; margin-top: 56px; color: #8a83a0; font-size: 13.5px; line-height: 1.7; }
+    footer code { color: var(--gold); background: rgba(255,255,255,.05); padding: 2px 7px; border-radius: 6px; }
+    .note { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="kicker">Playable Ad Developer · Portfolio</div>
+      <h1>Social Casino Playables</h1>
+      <p class="sub">Three lightweight, network-ready HTML5 playable ads — built end-to-end with
+        procedurally generated art, synthesised audio and a universal ad-network CTA layer.
+        Each one demonstrates a different engine and a complete play→win→install funnel.</p>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <div class="thumb"><span class="badge">Phaser 3</span>
+          <img src="thumbnails/slots.png" alt="Lucky Vegas Slots" onerror="this.style.display='none'"></div>
+        <div class="body">
+          <h2>Lucky Vegas Slots</h2>
+          <p>A 3×3 reel slot with anticipation, payline highlighting, a coin-shower jackpot and a
+             scripted 2-spin funnel ending in a 777 mega win.</p>
+          <div class="tags"><span class="tag">Reel physics</span><span class="tag">Particles</span><span class="tag">Win funnel</span></div>
+          <a class="play" href="slots/index.html">▶ Play demo</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><span class="badge">Pixi.js</span>
+          <img src="thumbnails/wheel.png" alt="Spin to Win" onerror="this.style.display='none'"></div>
+        <div class="body">
+          <h2>Spin to Win</h2>
+          <p>A weighted prize wheel with eased deceleration, peg-tick audio, a near-miss landing and a
+             guaranteed jackpot on the second spin.</p>
+          <div class="tags"><span class="tag">Easing</span><span class="tag">Procedural wheel</span><span class="tag">Coin FX</span></div>
+          <a class="play" href="wheel/index.html">▶ Play demo</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><span class="badge">Vanilla Canvas</span>
+          <img src="thumbnails/scratch.png" alt="Lucky Scratch" onerror="this.style.display='none'"></div>
+        <div class="body">
+          <h2>Lucky Scratch</h2>
+          <p>A touch scratch-off card using <code style="font-size:12px">destination-out</code> compositing,
+             auto-reveal at 50% scratched, match-3 win and install end-card — zero framework.</p>
+          <div class="tags"><span class="tag">Canvas 2D</span><span class="tag">Touch</span><span class="tag">Ultra-light</span></div>
+          <a class="play" href="scratch/index.html">▶ Play demo</a>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Built with HTML5 · CSS3 · JavaScript — Phaser 3, Pixi.js &amp; vanilla Canvas 2D.<br>
+      Universal CTA layer supports MRAID, Google AdMob, Meta, Unity Ads, AppLovin &amp; ironSource.
+      <div class="note">Run locally with a static server, e.g. <code>npx serve</code> in this folder, then open <code>localhost:3000</code>.</div>
+    </footer>
+  </div>
+</body>
+</html>
