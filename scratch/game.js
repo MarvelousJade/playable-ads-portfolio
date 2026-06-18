@@ -14,8 +14,9 @@
   var ctx = stage.getContext('2d');
 
   var CARD = { x: 80, y: 392, w: 560, h: 600 };
-  var GRID = ['🍒', '💎', '🔔', '⭐', '🍒', '💎', '🎰', '🍋', '💎'];   // three 💎 = win
-  var WIN_SYMBOL = '💎', WIN_AMOUNT = 25000;
+  // Real Twemoji art (assets/*.png, CC-BY 4.0); three gems = guaranteed win.
+  var GRID = ['cherry', 'gem', 'bell', 'star', 'cherry', 'gem', 'coin', 'lemon', 'gem'];
+  var WIN_SYMBOL = 'gem', WIN_AMOUNT = 25000;
   var WIN_CELLS = [];                                  // filled during build
   GRID.forEach(function (s, i) { if (s === WIN_SYMBOL) WIN_CELLS.push(i); });
 
@@ -32,6 +33,19 @@
   var prize = document.createElement('canvas'); prize.width = CARD.w; prize.height = CARD.h;
   var foil = document.createElement('canvas'); foil.width = CARD.w; foil.height = CARD.h;
   var bg = document.createElement('canvas'); bg.width = W; bg.height = H;
+
+  // real art (assets/*.png) loaded before first paint
+  var IMAGES = {};
+  function loadImages(keys, cb) {
+    var left = keys.length;
+    if (!left) return cb();
+    keys.forEach(function (k) {
+      var img = new Image();
+      img.onload = img.onerror = function () { if (--left === 0) cb(); };
+      img.src = '../assets/' + k + '.png';
+      IMAGES[k] = img;
+    });
+  }
 
   // ── Drawing helpers ─────────────────────────────────────────────────────────
   function roundRect(c, x, y, w, h, r) {
@@ -76,8 +90,12 @@
       cg.addColorStop(0, '#fbe6b0'); cg.addColorStop(1, '#f3d488');
       roundRect(c, r.x, r.y, r.s, r.s, 16); c.fillStyle = cg; c.fill();
       roundRect(c, r.x, r.y, r.s, r.s, 16); c.lineWidth = 3; c.strokeStyle = '#caa23a'; c.stroke();
-      c.font = '92px "Segoe UI Emoji","Noto Color Emoji",sans-serif';
-      c.fillText(GRID[i], r.x + r.s / 2, r.y + r.s / 2 + 4);
+      var im = IMAGES[GRID[i]];
+      if (im) {
+        var d = r.s * 0.66, off = (r.s - d) / 2;
+        c.save(); c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = 6; c.shadowOffsetY = 3;
+        c.drawImage(im, r.x + off, r.y + off, d, d); c.restore();
+      }
     }
   }
 
@@ -222,11 +240,9 @@
     }
   }
   function drawCoin(c, x, y, r, rot) {
-    c.save(); c.translate(x, y); c.rotate(rot); c.scale(Math.cos(rot) * 0.5 + 0.6, 1);
-    var g = c.createRadialGradient(-r * 0.3, -r * 0.3, 2, 0, 0, r);
-    g.addColorStop(0, '#fff3b0'); g.addColorStop(0.5, '#ffcc33'); g.addColorStop(1, '#c8860a');
-    c.fillStyle = g; c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill();
-    c.lineWidth = 2; c.strokeStyle = '#a86a06'; c.stroke();
+    if (!IMAGES.coin) return;
+    c.save(); c.translate(x, y); c.scale(Math.cos(rot) * 0.5 + 0.6, 1);  // horizontal squash = coin-flip
+    c.drawImage(IMAGES.coin, -r, -r, 2 * r, 2 * r);
     c.restore();
   }
 
@@ -281,8 +297,7 @@
     ctx.fillText('LUCKY SCRATCH', W / 2, 392);
     ctx.fillStyle = '#fff'; ctx.font = '400 34px Arial';
     ctx.fillText('You won ' + WIN_AMOUNT.toLocaleString() + ' coins!', W / 2, 470);
-    ctx.font = '160px "Segoe UI Emoji",sans-serif';
-    ctx.fillText('💎', W / 2, 678);
+    if (IMAGES.gem) ctx.drawImage(IMAGES.gem, W / 2 - 95, 580, 190, 190);
     drawButton(W / 2 - 220, 905, 440, 124, '#2bd659', 'PLAY NOW', 'FREE TO INSTALL');
   }
 
@@ -346,5 +361,7 @@
     stage.style.top = ((window.innerHeight - H * scale) / 2) + 'px';
   }
 
-  PlayableAd.onReady(boot);
+  PlayableAd.onReady(function () {
+    loadImages(['cherry', 'lemon', 'bell', 'star', 'gem', 'coin'], boot);
+  });
 })();

@@ -36,7 +36,7 @@ and a forced install end-card with a universal CTA.
 | HTML5 / CSS3 / JavaScript | All three demos, no build tooling required to run |
 | Phaser.js **or** Pixi.js | Demo 1 uses Phaser 3, Demo 2 uses Pixi 7 |
 | Replicate Vegas-style slot & casino mechanics | Slots, wheel and scratch are all classic casino formats |
-| Performance / fast load / smooth animation | Local-vendored libs, procedural art (zero image files), synthesised audio, vanilla build for the lightest case |
+| Performance / fast load / smooth animation | Local-vendored libs, tiny art (~90 KB), procedural framing, synthesised audio, vanilla build for the lightest case |
 | Ad-network SDK integration (Unity Ads, AdMob, ironSource…) | [`shared/playable.js`](shared/playable.js) — one CTA API, network-specific click protocols |
 | A/B testing through variations | Outcomes are data-driven `SCRIPT` arrays — swap the funnel, payouts or symbols without touching logic |
 | 2D animation | Reel spin, wheel easing, scratch reveal, coin showers, payline pulses |
@@ -56,13 +56,15 @@ playable-ads-portfolio/
 └── thumbnails/         ← landing-page screenshots
 ```
 
-### Procedural assets — by design
-There are **no image or audio files** in this repo. Symbol tiles, coins, the
-wheel and the foil are drawn at runtime to off-screen `<canvas>` elements;
-all SFX (spin whir, reel stops, coin clinks, win fanfare) are synthesised with
-the **WebAudio API**. This keeps every build tiny and instantly loadable — the
-single biggest factor in playable performance. Swapping in commissioned or
-open-source (CC0) art is a drop-in replacement at the texture-build step.
+### Art & audio
+Symbol art (cherry, lemon, bell, star, gem, coin) is **Twemoji** — open-licensed
+vector art (**CC-BY 4.0**) rasterised to crisp 512 px PNGs via `rasterize.js` and
+composited onto procedurally-drawn casino tiles. Everything else is generated at
+runtime: the cabinet / wheel / foil framing, the jackpot **7**, and **all audio**
+(spin whir, reel stops, coin clinks, win fanfare) synthesised with the **WebAudio
+API** — no audio files at all. Total art weight is ~90 KB, so builds stay tiny and
+instantly loadable — the single biggest factor in playable performance. Rebuild
+the PNGs from the source SVGs any time with `node rasterize.js`.
 
 ### Universal CTA layer (`shared/playable.js`)
 A playable usually ships to several networks from one build. `PlayableAd.install()`
@@ -122,3 +124,9 @@ For a live campaign each demo is bundled to a **single self-contained `index.htm
 
 `HTML5` · `CSS3` · `JavaScript (ES5-safe)` · `Phaser 3.80` · `Pixi.js 7.4` ·
 `Canvas 2D` · `WebAudio` · `MRAID`
+
+## Credits & licenses
+
+- **Symbol art** — [Twemoji](https://github.com/twitter/twemoji) © Twitter, Inc. and other contributors, licensed **CC-BY 4.0**. Source SVGs in `assets/svg/`, rasterised PNGs in `assets/`. See `assets/ATTRIBUTION.md`.
+- **Phaser 3** (MIT) and **Pixi.js** (MIT) — vendored in `vendor/`.
+- The jackpot 7, all framing/UI, animation and audio were authored for this project.

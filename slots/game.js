@@ -19,12 +19,14 @@
   var WIN_LEFT = 86, WIN_RIGHT = 634;
 
   // ── Symbols (procedural art descriptors) ────────────────────────────────────
+  // Fruit/object symbols use real Twemoji art (assets/*.png, CC-BY 4.0);
+  // the jackpot 7 stays custom-drawn for a casino look.
   var SYMBOLS = [
-    { id: 'cherry',  emoji: '🍒', c1: '#33457f', c2: '#16213f' },
-    { id: 'lemon',   emoji: '🍋', c1: '#33457f', c2: '#16213f' },
-    { id: 'bell',    emoji: '🔔', c1: '#6a3680', c2: '#2f1640' },
-    { id: 'star',    emoji: '⭐', c1: '#6a3680', c2: '#2f1640' },
-    { id: 'diamond', emoji: '💎', c1: '#1f6a70', c2: '#0c3033' },
+    { id: 'cherry',  key: 'cherry', c1: '#33457f', c2: '#16213f' },
+    { id: 'lemon',   key: 'lemon',  c1: '#33457f', c2: '#16213f' },
+    { id: 'bell',    key: 'bell',   c1: '#6a3680', c2: '#2f1640' },
+    { id: 'star',    key: 'star',   c1: '#6a3680', c2: '#2f1640' },
+    { id: 'gem',     key: 'gem',    c1: '#1f6a70', c2: '#0c3033' },
     { id: 'seven',   draw: drawSeven, c1: '#8a242b', c2: '#3a0d11' }
   ];
   var BELL = 2, SEVEN = 5;
@@ -88,32 +90,18 @@
     if (sym.draw) {
       sym.draw(ctx, s);
     } else {
-      ctx.font = Math.floor(s * 0.56) + 'px "Segoe UI Emoji","Noto Color Emoji",sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(sym.emoji, s / 2, s / 2 + s * 0.04);
+      var img = scene.textures.get(sym.key).getSourceImage();
+      var d = s * 0.66, off = (s - d) / 2;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
+      ctx.shadowBlur = s * 0.05; ctx.shadowOffsetY = s * 0.025;
+      ctx.drawImage(img, off, off, d, d);
+      ctx.restore();
     }
     scene.textures.addCanvas('sym' + idx, cv);
   }
 
-  function makeCoinTexture(scene) {
-    var s = 56, cv = document.createElement('canvas');
-    cv.width = s; cv.height = s;
-    var ctx = cv.getContext('2d');
-    var g = ctx.createRadialGradient(s * 0.38, s * 0.34, 4, s * 0.5, s * 0.5, s * 0.5);
-    g.addColorStop(0, '#fff3b0');
-    g.addColorStop(0.5, '#ffcc33');
-    g.addColorStop(1, '#c8860a');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(s / 2, s / 2, s / 2 - 3, 0, Math.PI * 2); ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = '#a86a06';
-    ctx.beginPath(); ctx.arc(s / 2, s / 2, s / 2 - 3, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = '#b9760a';
-    ctx.font = 'bold ' + Math.floor(s * 0.5) + 'px Arial';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('$', s / 2, s / 2 + 2);
-    scene.textures.addCanvas('coin', cv);
-  }
+  // coin art is loaded from assets/coin.png in preload()
 
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
@@ -132,6 +120,12 @@
     Extends: Phaser.Scene,
     initialize: function GameScene() { Phaser.Scene.call(this, { key: 'game' }); },
 
+    preload: function () {
+      ['cherry', 'lemon', 'bell', 'star', 'gem', 'coin'].forEach(function (k) {
+        this.load.image(k, '../assets/' + k + '.png');
+      }, this);
+    },
+
     create: function () {
       var self = this;
       this.spinning = false;
@@ -140,7 +134,6 @@
       this.reels = [];
 
       SYMBOLS.forEach(function (s, i) { makeSymbolTexture(self, s, i); });
-      makeCoinTexture(this);
 
       this.buildBackground();
       this.buildMachine();
@@ -269,7 +262,7 @@
       this.coins = this.add.particles(0, -60, 'coin', {
         x: { min: WIN_LEFT, max: WIN_RIGHT },
         speedY: { min: 250, max: 520 }, speedX: { min: -140, max: 140 },
-        accelerationY: 700, lifespan: 2200, scale: { min: 0.4, max: 0.85 },
+        accelerationY: 700, lifespan: 2200, scale: { min: 0.06, max: 0.12 },
         rotate: { min: 0, max: 360 }, quantity: 3, frequency: 45, emitting: false
       });
       this.coins.setDepth(50);
