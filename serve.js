@@ -15,7 +15,11 @@ http.createServer((req, res) => {
   if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404); res.end('Not found'); return;
   }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+  // no-store so the browser always fetches fresh files during development
+  res.writeHead(200, {
+    'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+    'Cache-Control': 'no-store'
+  });
   fs.createReadStream(file).pipe(res);
 }).listen(PORT, () => {
   console.log('\n  ▶  Playable Ads Portfolio running at:\n');
