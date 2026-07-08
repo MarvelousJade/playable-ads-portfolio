@@ -15,6 +15,7 @@
   var ctx = null;
   var master = null;
   var muted = false;
+  var suspended = false;   // ad not viewable / page hidden — no sound may play
   var spinNodes = null;
 
   function ensure() {
@@ -32,7 +33,7 @@
 
   // A single enveloped oscillator "blip".
   function tone(o) {
-    if (muted) return;
+    if (muted || suspended) return;
     var c = ensure();
     if (!c) return;
     var t0 = c.currentTime + (o.delay || 0);
@@ -54,7 +55,7 @@
 
   // Short burst of filtered noise — used for coins / scratching.
   function noise(o) {
-    if (muted) return;
+    if (muted || suspended) return;
     var c = ensure();
     if (!c) return;
     var t0 = c.currentTime + (o.delay || 0);
@@ -91,6 +92,17 @@
     toggleMuted: function () { this.setMuted(!muted); return muted; },
     isMuted: function () { return muted; },
 
+    // Hard-silence while the ad is off-screen (MRAID viewability / page hidden).
+    // Suspending the context also halts any already-scheduled nodes (spin whir).
+    suspend: function () {
+      suspended = true;
+      if (ctx && ctx.suspend) ctx.suspend();
+    },
+    resume: function () {
+      suspended = false;
+      if (ctx && ctx.resume && ctx.state === 'suspended') ctx.resume();
+    },
+
     click: function () { tone({ type: 'square', freq: 660, freqTo: 320, dur: 0.07, vol: 0.18 }); },
     tick: function () { tone({ type: 'square', freq: 1000, freqTo: 520, dur: 0.035, vol: 0.13 }); },
     reelStop: function () { tone({ type: 'sine', freq: 420, freqTo: 150, dur: 0.13, vol: 0.3 }); },
@@ -98,7 +110,7 @@
 
     // Looping reel whir — start when reels spin, stop when they land.
     spinStart: function () {
-      if (muted) return;
+      if (muted || suspended) return;
       var c = ensure();
       if (!c || spinNodes) return;
       var osc = c.createOscillator();
@@ -144,7 +156,7 @@
     // gritty, granular "scrrtch" that sweeps down with resonance — reads as a
     // coin dragging across foil rather than a thin hiss. Randomised per stroke.
     scratch: function () {
-      if (muted) return;
+      if (muted || suspended) return;
       var c = ensure();
       if (!c) return;
       var t0 = c.currentTime, dur = 0.12;

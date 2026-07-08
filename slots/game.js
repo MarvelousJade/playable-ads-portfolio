@@ -31,11 +31,23 @@
   ];
   var BELL = 2, SEVEN = 5;
 
-  // ── Scripted outcomes (the funnel) ──────────────────────────────────────────
-  var SCRIPT = [
-    { payline: [BELL, BELL, BELL], win: 800, label: 'NICE WIN!' },
-    { payline: [SEVEN, SEVEN, SEVEN], win: 25000, jackpot: true, full: SEVEN, label: 'MEGA WIN!' }
-  ];
+  // ── Scripted outcomes (the funnel) — A/B variants ───────────────────────────
+  // Variant is chosen by the network / query string (?v=b); producing a new
+  // funnel (win cadence, payouts, spin count) is a data change, not code.
+  var VARIANTS = {
+    // A: short 2-spin funnel — fastest route to the CTA.
+    a: [
+      { payline: [BELL, BELL, BELL], win: 800, label: 'NICE WIN!' },
+      { payline: [SEVEN, SEVEN, SEVEN], win: 25000, jackpot: true, full: SEVEN, label: 'MEGA WIN!' }
+    ],
+    // B: 3-spin funnel with a near-miss — tests whether tension lifts CTR.
+    b: [
+      { payline: [BELL, BELL, BELL], win: 800, label: 'NICE WIN!' },
+      { payline: [SEVEN, SEVEN, BELL], win: 0, label: 'SO CLOSE!' },
+      { payline: [SEVEN, SEVEN, SEVEN], win: 25000, jackpot: true, full: SEVEN, label: 'MEGA WIN!' }
+    ]
+  };
+  var SCRIPT = VARIANTS[PlayableAd.variant()] || VARIANTS.a;
 
   var balance = 1000;
 
@@ -121,8 +133,10 @@
     initialize: function GameScene() { Phaser.Scene.call(this, { key: 'game' }); },
 
     preload: function () {
+      // single-file network builds inject window.INLINE_ASSETS (data URIs)
+      var inline = window.INLINE_ASSETS;
       ['cherry', 'lemon', 'bell', 'star', 'gem', 'coin'].forEach(function (k) {
-        this.load.image(k, '../assets/' + k + '.png');
+        this.load.image(k, (inline && inline[k]) || '../assets/' + k + '.png');
       }, this);
     },
 
@@ -279,7 +293,7 @@
       var label = this.add.text(0, -6, 'SPIN', {
         fontFamily: 'Arial Black, Arial', fontSize: '52px', color: '#ffffff'
       }).setOrigin(0.5).setShadow(0, 3, '#0a4a1c', 4);
-      var sub = this.add.text(0, 34, '2 FREE SPINS', {
+      var sub = this.add.text(0, 34, SCRIPT.length + ' FREE SPINS', {
         fontFamily: 'Arial', fontSize: '20px', color: '#d6ffe0'
       }).setOrigin(0.5);
       btn.add([g, label, sub]);
@@ -377,12 +391,19 @@
     onAllStopped: function (outcome) {
       SFX.spinStop();
       this.spinning = false;
-      this.highlightWin();
-      var self = this;
 
       if (outcome.jackpot) {
+        this.highlightWin();
         this.bigWin(outcome);
+      } else if (!outcome.win) {
+        // near-miss (variant B): no payline, keep the tension, prompt re-spin
+        SFX.lose();
+        this.spinBtn.setAlpha(1);
+        this.btnPulse.resume();
+        this.spinSub.setText('SPIN AGAIN!');
+        this.flashText(outcome.label, '#ff9a6b');
       } else {
+        this.highlightWin();
         SFX.win();
         this.addWinning(outcome.win);
         // prompt the next (jackpot) spin
@@ -493,13 +514,20 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   function boot() {
-    new Phaser.Game({
+    var game = new Phaser.Game({
       type: Phaser.AUTO,
       width: W, height: H,
       parent: 'game',
       backgroundColor: '#0a0814',
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
       scene: [GameScene]
+    });
+
+    // MRAID viewability / page visibility: freeze the loop + silence audio
+    // while the ad is off-screen, resume seamlessly when it swipes back in.
+    PlayableAd.onPauseChange(function (paused) {
+      if (paused) { game.loop.sleep(); SFX.suspend(); }
+      else { game.loop.wake(); SFX.resume(); }
     });
   }
 

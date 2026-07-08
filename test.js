@@ -46,13 +46,18 @@ async function main() {
   let failures = 0;
   const results = [];
 
-  async function run(name, urlPath, drive) {
+  async function run(name, urlPath, drive, opts = {}) {
     const ctx = await browser.newContext({ viewport: { width: 720, height: 1280 }, deviceScaleFactor: 1 });
     const page = await ctx.newPage();
     page.setDefaultTimeout(20000);   // fail fast instead of hanging
     const errors = [];
+    const extraRequests = [];
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
+    page.on('request', r => {
+      const u = r.url();
+      if (u !== base + urlPath && !u.startsWith('data:') && !u.includes('favicon')) extraRequests.push(u);
+    });
     try {
       await page.goto(base + urlPath, { waitUntil: 'load' });
       await sleep(1600);
@@ -62,6 +67,10 @@ async function main() {
     } catch (e) {
       errors.push('THROW: ' + e.message);
     }
+    // network-spec check: a single-file build must make zero extra requests
+    if (opts.singleFile && extraRequests.length) {
+      errors.push('NOT SELF-CONTAINED, requested: ' + extraRequests.join(', '));
+    }
     const ok = errors.length === 0;
     if (!ok) failures++;
     results.push({ name, ok, errors });
@@ -70,27 +79,39 @@ async function main() {
     await ctx.close();
   }
 
-  // Demo 1 — slot: two spins → end card
-  await run('slots', '/slots/', async (page) => {
+  const driveSlots = async (page) => {
     await tap(page, 360, 1130); await sleep(3000);   // spin 1
     await tap(page, 360, 1130); await sleep(4600);   // spin 2 → jackpot → end card
-  });
-
-  // Demo 2 — wheel: two spins → end card
-  await run('wheel', '/wheel/', async (page) => {
+  };
+  const driveWheel = async (page) => {
     await tap(page, 360, 1140); await sleep(5200);   // spin 1
     await tap(page, 360, 1140); await sleep(7400);   // spin 2 → jackpot → end card
-  });
-
-  // Demo 3 — scratch: drag across the card until auto-reveal
-  await run('scratch', '/scratch/', async (page) => {
+  };
+  const driveScratch = async (page) => {
     for (let y = 440; y <= 950; y += 55) {
       await page.mouse.move(120, y); await page.mouse.down();
       for (let x = 120; x <= 600; x += 18) await page.mouse.move(x, y);
       await page.mouse.up();
     }
     await sleep(2600);
+  };
+
+  // Source demos
+  await run('slots', '/slots/', driveSlots);
+  await run('wheel', '/wheel/', driveWheel);
+  await run('scratch', '/scratch/', driveScratch);
+
+  // A/B variant B (slots: 3-spin funnel with a near-miss)
+  await run('slots-vb', '/slots/?v=b', async (page) => {
+    await tap(page, 360, 1130); await sleep(3000);   // spin 1: teaser win
+    await tap(page, 360, 1130); await sleep(3000);   // spin 2: near-miss
+    await tap(page, 360, 1130); await sleep(4600);   // spin 3 → jackpot → end card
   });
+
+  // Single-file network builds — must run AND make zero external requests
+  await run('slots-dist', '/dist/slots.html', driveSlots, { singleFile: true });
+  await run('wheel-dist', '/dist/wheel.html', driveWheel, { singleFile: true });
+  await run('scratch-dist', '/dist/scratch.html', driveScratch, { singleFile: true });
 
   // Landing page
   await run('landing', '/', async () => {});

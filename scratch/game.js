@@ -14,9 +14,16 @@
   var ctx = stage.getContext('2d');
 
   var CARD = { x: 80, y: 392, w: 560, h: 600 };
-  // Real Twemoji art (assets/*.png, CC-BY 4.0); three gems = guaranteed win.
-  var GRID = ['cherry', 'gem', 'bell', 'star', 'cherry', 'gem', 'coin', 'lemon', 'gem'];
-  var WIN_SYMBOL = 'gem', WIN_AMOUNT = 25000;
+  // Real Twemoji art (assets/*.png, CC-BY 4.0); three matches = guaranteed win.
+  // Grid layout / prize are A/B variant data (?v=b), not code.
+  var VARIANTS = {
+    a: { grid: ['cherry', 'gem', 'bell', 'star', 'cherry', 'gem', 'coin', 'lemon', 'gem'],
+         winSymbol: 'gem', winAmount: 25000 },
+    b: { grid: ['star', 'cherry', 'lemon', 'bell', 'star', 'coin', 'gem', 'star', 'bell'],
+         winSymbol: 'star', winAmount: 50000 }
+  };
+  var V = VARIANTS[PlayableAd.variant()] || VARIANTS.a;
+  var GRID = V.grid, WIN_SYMBOL = V.winSymbol, WIN_AMOUNT = V.winAmount;
   var WIN_CELLS = [];                                  // filled during build
   GRID.forEach(function (s, i) { if (s === WIN_SYMBOL) WIN_CELLS.push(i); });
 
@@ -34,7 +41,8 @@
   var foil = document.createElement('canvas'); foil.width = CARD.w; foil.height = CARD.h;
   var bg = document.createElement('canvas'); bg.width = W; bg.height = H;
 
-  // real art (assets/*.png) loaded before first paint
+  // real art (assets/*.png) loaded before first paint;
+  // single-file network builds inject window.INLINE_ASSETS (data URIs)
   var IMAGES = {};
   function loadImages(keys, cb) {
     var left = keys.length;
@@ -42,7 +50,7 @@
     keys.forEach(function (k) {
       var img = new Image();
       img.onload = img.onerror = function () { if (--left === 0) cb(); };
-      img.src = '../assets/' + k + '.png';
+      img.src = (window.INLINE_ASSETS && window.INLINE_ASSETS[k]) || '../assets/' + k + '.png';
       IMAGES[k] = img;
     });
   }
@@ -297,12 +305,14 @@
     ctx.fillText('LUCKY SCRATCH', W / 2, 392);
     ctx.fillStyle = '#fff'; ctx.font = '400 34px Arial';
     ctx.fillText('You won ' + WIN_AMOUNT.toLocaleString() + ' coins!', W / 2, 470);
-    if (IMAGES.gem) ctx.drawImage(IMAGES.gem, W / 2 - 95, 580, 190, 190);
+    if (IMAGES[WIN_SYMBOL]) ctx.drawImage(IMAGES[WIN_SYMBOL], W / 2 - 95, 580, 190, 190);
     drawButton(W / 2 - 220, 905, 440, 124, '#2bd659', 'PLAY NOW', 'FREE TO INSTALL');
   }
 
   // ── Main loop ───────────────────────────────────────────────────────────────
   function frame(now) {
+    // MRAID viewability / page visibility: hold the frame while off-screen
+    if (PlayableAd.isPaused()) { requestAnimationFrame(frame); return; }
     ctx.clearRect(0, 0, W, H);
     ctx.drawImage(bg, 0, 0);
 
@@ -347,6 +357,10 @@
     stage.addEventListener('touchstart', onDown, { passive: false });
     stage.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
+
+    PlayableAd.onPauseChange(function (paused) {
+      if (paused) SFX.suspend(); else SFX.resume();
+    });
 
     document.getElementById('loader').classList.add('hide');
     PlayableAd.track('game_loaded');

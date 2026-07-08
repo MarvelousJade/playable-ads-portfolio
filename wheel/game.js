@@ -26,11 +26,19 @@
   var N = SEG.length;
   var STEP = (Math.PI * 2) / N;
 
-  // Scripted landings: index into SEG + coin reward.
-  var SCRIPT = [
-    { index: 2, win: 500, label: 'YOU WON 500!' },        // '500'
-    { index: 7, win: 25000, jackpot: true, label: 'JACKPOT!' }
-  ];
+  // Scripted landings: index into SEG + coin reward — A/B variants (?v=b).
+  var VARIANTS = {
+    // A: 2-spin funnel — teaser win, then jackpot.
+    a: [
+      { index: 2, win: 500, label: 'YOU WON 500!' },        // '500'
+      { index: 7, win: 25000, jackpot: true, label: 'JACKPOT!' }
+    ],
+    // B: 1-spin funnel, faster spin — tests shorter time-to-CTA.
+    b: [
+      { index: 7, win: 25000, jackpot: true, label: 'JACKPOT!', dur: 3600 }
+    ]
+  };
+  var SCRIPT = VARIANTS[PlayableAd.variant()] || VARIANTS.a;
 
   var balance = 1000;
   var app, wheel, spinning = false, scriptIndex = 0;
@@ -59,13 +67,19 @@
     return PIXI.Texture.from(cv);
   }
 
+  // ── Pause-aware clock ───────────────────────────────────────────────────────
+  // MRAID viewability can hide the ad mid-spin; all animation reads this clock,
+  // which freezes while paused, so tweens hold position instead of jumping.
+  var clockOffset = 0, pausedAt = 0;
+  function nowMs() { return (pausedAt || performance.now()) - clockOffset; }
+
   // ── Tiny ticker-driven tween (Pixi has no built-in tween) ───────────────────
   // NB: Pixi ticker callbacks receive deltaTime, not a timestamp — so drive the
-  // tween off requestAnimationFrame + performance.now() to stay engine-agnostic.
+  // tween off requestAnimationFrame + the pause-aware clock to stay engine-agnostic.
   function animate(duration, ease, onUpdate, onComplete) {
-    var start = performance.now();
+    var start = nowMs();
     function step() {
-      var t = Math.min(1, (performance.now() - start) / duration);
+      var t = Math.min(1, (nowMs() - start) / duration);
       onUpdate(ease(t), t);
       if (t < 1) requestAnimationFrame(step);
       else if (onComplete) onComplete();
@@ -187,7 +201,8 @@
   }
 
   function buildControls() {
-    spinBtn = makeButton('SPIN', '2 FREE SPINS', 320, 120, 0x2bd659, onSpinPressed);
+    var subLabel = SCRIPT.length + ' FREE SPIN' + (SCRIPT.length === 1 ? '' : 'S');
+    spinBtn = makeButton('SPIN', subLabel, 320, 120, 0x2bd659, onSpinPressed);
     spinBtn.x = CX; spinBtn.y = 1140;
     app.stage.addChild(spinBtn);
     pulse(spinBtn);
@@ -204,9 +219,9 @@
 
   function pulse(obj, base, toAlpha) {
     base = base || 1;
-    var t0 = performance.now();
+    var t0 = nowMs();
     app.ticker.add(function () {
-      var p = (Math.sin((performance.now() - t0) / 320) + 1) / 2;
+      var p = (Math.sin((nowMs() - t0) / 320) + 1) / 2;
       obj.scale.set(base + p * 0.07 * base);
       if (toAlpha != null) obj.alpha = toAlpha + p * (1 - toAlpha);
     });
@@ -236,7 +251,7 @@
     var to = from + Math.PI * 2 * 5 + delta;   // 5 full turns + settle
 
     var lastSeg = -1;   // wheel uses per-segment ticks (below) — no continuous whir
-    animate(4200, easeOutQuart,
+    animate(outcome.dur || 4200, easeOutQuart,
       function (e) {
         wheel.rotation = from + (to - from) * e;
         // tick as each segment boundary crosses the pointer
@@ -268,10 +283,10 @@
     g.beginFill(0xffffff, 0.85);
     g.moveTo(0, 0); g.arc(0, 0, R, index * STEP, (index + 1) * STEP); g.lineTo(0, 0); g.endFill();
     g.x = 0; g.y = 0; wheel.addChildAt(g, 1);
-    var t0 = performance.now();
+    var t0 = nowMs();
     var fade = function () {
-      var a = 1 - Math.min(1, (performance.now() - t0) / 1400);
-      g.alpha = a * 0.7 * (0.5 + 0.5 * Math.sin(performance.now() / 60));
+      var a = 1 - Math.min(1, (nowMs() - t0) / 1400);
+      g.alpha = a * 0.7 * (0.5 + 0.5 * Math.sin(nowMs() / 60));
       if (a <= 0) { app.ticker.remove(fade); g.destroy(); }
     };
     app.ticker.add(fade);
@@ -375,6 +390,22 @@
 
     fit();
     window.addEventListener('resize', fit);
+
+    // MRAID viewability / page visibility: freeze rendering + the animation
+    // clock + audio while the ad is off-screen; resume without a time jump.
+    PlayableAd.onPauseChange(function (paused) {
+      if (paused) {
+        pausedAt = performance.now();
+        app.ticker.stop();
+        SFX.suspend();
+      } else {
+        clockOffset += performance.now() - pausedAt;
+        pausedAt = 0;
+        app.ticker.start();
+        SFX.resume();
+      }
+    });
+
     document.getElementById('loader').classList.add('hide');
     PlayableAd.track('game_loaded');
   }

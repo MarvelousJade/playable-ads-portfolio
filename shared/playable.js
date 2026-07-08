@@ -17,8 +17,18 @@
   // ── Store destinations (swap per campaign) ───────────────────────────────
   var CONFIG = {
     iosUrl: 'https://apps.apple.com/app/id000000000',
-    androidUrl: 'https://play.google.com/store/apps/details?id=com.medialicious.demo'
+    androidUrl: 'https://play.google.com/store/apps/details?id=com.example.socialcasino'
   };
+
+  // ── A/B variant selection ─────────────────────────────────────────────────
+  // Networks pass variant via query string (?v=b) or an injected global
+  // (window.AB_VARIANT, set by the packaging step). Defaults to 'a'.
+  function variant() {
+    try {
+      var m = /[?&]v=([\w-]+)/.exec(global.location.search);
+      return (m && m[1]) || global.AB_VARIANT || 'a';
+    } catch (e) { return 'a'; }
+  }
 
   function isIOS() {
     return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -67,10 +77,11 @@
       else document.addEventListener('DOMContentLoaded', fn);
     }
     domReady(function () {
-      if (typeof mraid === 'undefined') { cb(); return; }
+      if (typeof mraid === 'undefined') { wirePauseSources(); cb(); return; }
       if (mraid.getState && mraid.getState() === 'loading') {
-        mraid.addEventListener('ready', cb);
+        mraid.addEventListener('ready', function () { wirePauseSources(); cb(); });
       } else {
+        wirePauseSources();
         cb();
       }
     });
@@ -80,6 +91,39 @@
   function onViewableChange(cb) {
     if (typeof mraid === 'undefined' || !mraid.addEventListener) return;
     mraid.addEventListener('viewableChange', cb);
+  }
+
+  // ── Unified pause bus ──────────────────────────────────────────────────────
+  // Ad networks preload playables off-screen and swipe them in/out of view;
+  // a compliant playable must not run or make sound while hidden. This folds
+  // MRAID viewability and the Page Visibility API into one signal.
+  var paused = false;
+  var pauseCbs = [];
+
+  function setPaused(p) {
+    p = !!p;
+    if (p === paused) return;
+    paused = p;
+    track(p ? 'paused' : 'resumed');
+    for (var i = 0; i < pauseCbs.length; i++) {
+      try { pauseCbs[i](p); } catch (e) { /* one bad cb must not break the rest */ }
+    }
+  }
+
+  function onPauseChange(cb) { pauseCbs.push(cb); }
+  function isPaused() { return paused; }
+
+  function wirePauseSources() {
+    document.addEventListener('visibilitychange', function () {
+      setPaused(document.hidden);
+    });
+    if (typeof mraid !== 'undefined' && mraid.addEventListener) {
+      mraid.addEventListener('viewableChange', function (viewable) {
+        setPaused(!viewable);
+      });
+      // some SDKs report not-viewable at start (ad preloaded off-screen)
+      if (mraid.isViewable && !mraid.isViewable()) setPaused(true);
+    }
   }
 
   // Lightweight analytics hook — wire to the network's event API in production.
@@ -95,6 +139,9 @@
     install: install,
     onReady: onReady,
     onViewableChange: onViewableChange,
+    onPauseChange: onPauseChange,
+    isPaused: isPaused,
+    variant: variant,
     track: track,
     isIOS: isIOS,
     storeUrl: storeUrl

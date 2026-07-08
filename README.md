@@ -37,8 +37,9 @@ and a forced install end-card with a universal CTA.
 | Phaser.js **or** Pixi.js | Demo 1 uses Phaser 3, Demo 2 uses Pixi 7 |
 | Replicate Vegas-style slot & casino mechanics | Slots, wheel and scratch are all classic casino formats |
 | Performance / fast load / smooth animation | Local-vendored libs, tiny art (~90 KB), procedural framing, synthesised audio, vanilla build for the lightest case |
-| Ad-network SDK integration (Unity Ads, AdMob, ironSource…) | [`shared/playable.js`](shared/playable.js) — one CTA API, network-specific click protocols |
-| A/B testing through variations | Outcomes are data-driven `SCRIPT` arrays — swap the funnel, payouts or symbols without touching logic |
+| Ad-network SDK integration (Unity Ads, AdMob, ironSource…) | [`shared/playable.js`](shared/playable.js) — one CTA API, network-specific click protocols, MRAID viewability → pause/resume |
+| Network technical specs | [`build.js`](build.js) packages each demo into a **single self-contained HTML file** with a size report vs network caps; tests assert zero external requests |
+| A/B testing through variations | Every game ships **two live variants** (`?v=b`) selected from data-driven `SCRIPT` arrays — funnel, payouts and symbols swap without touching logic |
 | 2D animation | Reel spin, wheel easing, scratch reveal, coin showers, payline pulses |
 
 ## Architecture
@@ -51,8 +52,11 @@ playable-ads-portfolio/
 ├── scratch/            ← Demo 3 (vanilla Canvas)
 ├── shared/
 │   ├── sfx.js          ← procedural WebAudio SFX engine (no audio files)
-│   └── playable.js     ← universal MRAID / ad-network CTA + lifecycle layer
+│   └── playable.js     ← universal MRAID / ad-network CTA + lifecycle + pause bus
 ├── vendor/             ← phaser.min.js, pixi.min.js (vendored, offline-safe)
+├── build.js            ← single-file network packager → dist/
+├── dist/               ← self-contained per-network builds (committed as proof)
+├── test.js             ← headless Playwright suite (demos + variants + dist)
 └── thumbnails/         ← landing-page screenshots
 ```
 
@@ -77,22 +81,41 @@ detects the host environment and fires the correct redirect:
 - **AppLovin DAPI** (`dapi.openStoreUrl`)
 - **`window.open` fallback** for preview / web
 
-It also exposes `onReady()` (waits for DOM + MRAID `ready`), `onViewableChange()`
-(pause/resume on viewability) and a `track()` analytics hook.
+It also exposes `onReady()` (waits for DOM + MRAID `ready`), a **unified pause
+bus** (`onPauseChange()` / `isPaused()`, fed by MRAID `viewableChange` *and* the
+Page Visibility API), `variant()` for A/B selection, and a `track()` analytics hook.
+
+**Viewability compliance:** networks preload playables off-screen and swipe them
+in and out of view — a compliant playable must not run or make sound while hidden.
+All three demos subscribe to the pause bus: the Phaser loop sleeps, the Pixi ticker
+stops (with a pause-aware animation clock so tweens resume without jumping), the
+vanilla rAF loop holds its frame, and the WebAudio context suspends.
 
 ## A/B testing
 
-Each game's outcome is a plain data array, e.g. the slot funnel:
+Each game ships **two live funnel variants**, selected by query string (`?v=b`) or
+an injected `window.AB_VARIANT` global — the mechanism a network's creative-testing
+pipeline would use:
+
+| Demo | Variant A | Variant B |
+|---|---|---|
+| Slots | 2-spin funnel | [3-spin funnel with a near-miss](slots/index.html?v=b) — does tension lift CTR? |
+| Wheel | 2-spin funnel | [1 spin, faster](wheel/index.html?v=b) — shorter time-to-CTA |
+| Scratch | Gem prize, 25 000 | [Star prize, 50 000](scratch/index.html?v=b) — prize framing |
+
+Outcomes are plain data arrays, e.g. the slot funnel:
 
 ```js
-var SCRIPT = [
-  { payline: [BELL, BELL, BELL], win: 800 },              // teaser win
-  { payline: [SEVEN, SEVEN, SEVEN], win: 25000, jackpot: true } // mega win → CTA
-];
+var VARIANTS = {
+  a: [ { payline: [BELL, BELL, BELL], win: 800 },                        // teaser win
+       { payline: [SEVEN, SEVEN, SEVEN], win: 25000, jackpot: true } ],  // mega win → CTA
+  b: [ /* …adds a near-miss spin… */ ]
+};
+var SCRIPT = VARIANTS[PlayableAd.variant()] || VARIANTS.a;
 ```
 
-Producing variants (different win cadence, symbols, payouts, number of spins) is
-a data change, not a code change — ideal for performance-driven iteration.
+Producing a new variant (win cadence, symbols, payouts, number of spins) is a data
+change, not a code change — ideal for performance-driven iteration.
 
 ## Running locally
 
@@ -108,17 +131,39 @@ python -m http.server 8000
 Then open the landing page and click into each demo. (Opening the files over
 `file://` mostly works too, but a static server avoids browser security quirks.)
 
-## Production / network packaging notes
+## Network packaging — single-file builds
 
-For a live campaign each demo is bundled to a **single self-contained `index.html`**
-(library + JS + generated assets inlined) to satisfy network requirements:
+Ad networks require a playable to be **one self-contained file with zero external
+requests**. `node build.js` packages each demo that way — engine, shared modules,
+game code inlined; PNG art embedded as base64 data URIs — and prints a size
+report against the common caps (≤5 MB raw, ≤2 MB zipped):
 
-- **Single-file HTML**, typically **< 2 MB** zipped (well within the common 2–5 MB caps).
+| Build | Raw | Gzipped |
+|---|---|---|
+| [`dist/slots.html`](dist/slots.html) (Phaser 3) | 1.3 MB | **405 KB** |
+| [`dist/wheel.html`](dist/wheel.html) (Pixi.js) | 476 KB | **143 KB** |
+| [`dist/scratch.html`](dist/scratch.html) (vanilla) | 151 KB | **99 KB** |
+
+The test suite loads every dist build headlessly and **fails if it makes a single
+network request** — proving self-containment, not just claiming it.
+
 - **MRAID** `mraid.js` is injected by the network at serve time — the code already
   guards for its presence.
-- Per-network specs (Unity ZIP, AdMob single-file, ironSource/AppLovin MRAID,
-  Meta `FbPlayableAd`) are handled by the shared CTA layer; only the packaging
-  wrapper differs.
+- Per-network click protocols (Unity, AdMob, ironSource/AppLovin MRAID, Meta
+  `FbPlayableAd`) are handled by the shared CTA layer; only the delivery wrapper
+  (e.g. Unity's ZIP) differs per network.
+
+## Testing
+
+```bash
+npm install          # playwright (dev-only; the playables have zero dependencies)
+node build.js        # produce dist/ single-file builds
+node test.js         # headless suite
+```
+
+The suite drives every demo end-to-end (spin/spin/scratch → end card), captures
+screenshots, fails on any console error, covers **variant B** funnels, and asserts
+the dist builds are fully self-contained.
 
 ## Tech
 
