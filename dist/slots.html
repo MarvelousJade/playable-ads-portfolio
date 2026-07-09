@@ -348,6 +348,16 @@
     }
   }
 
+  // ── Social-proof winners feed ──────────────────────────────────────────────
+  // Top playables (e.g. Blackout Bingo) show a rotating "X just won Y" strip.
+  // Deterministic off the clock so all engines just render the same string.
+  var FEED_NAMES = ['Mia', 'Jake', 'Ana', 'Leo', 'Zoe', 'Sam', 'Ivy', 'Max', 'Eva', 'Tom'];
+  function socialFeed() {
+    var i = Math.floor(Date.now() / 2600) % FEED_NAMES.length;
+    var amt = 2000 + ((i * 7919) % 23) * 500;
+    return '🎉 ' + FEED_NAMES[i] + ' just won ' + amt.toLocaleString() + ' coins!';
+  }
+
   // Lightweight analytics hook — wire to the network's event API in production.
   function track(event, data) {
     try {
@@ -364,6 +374,7 @@
     onPauseChange: onPauseChange,
     isPaused: isPaused,
     variant: variant,
+    socialFeed: socialFeed,
     track: track,
     isIOS: isIOS,
     storeUrl: storeUrl
@@ -517,6 +528,7 @@
     create: function () {
       var self = this;
       this.spinning = false;
+      this.chestOpen = false;
       this.scriptIndex = 0;
       this.freeSpins = SCRIPT.length;
       this.reels = [];
@@ -530,6 +542,8 @@
       this.buildCoinEmitter();
       this.buildSpinButton();
       this.buildAttract();
+      this.buildInstallPill();
+      this.buildTicker();
 
       // Unlock audio on first interaction.
       this.input.once('pointerdown', function () { SFX.unlock(); });
@@ -677,8 +691,11 @@
 
       // Robust fallback: tap anywhere on the machine (below the HUD) to spin.
       // Touch-friendly and avoids first-tap hit-test misses on the container.
+      // The persistent install pill (bottom-right) is excluded.
       this.input.on('pointerdown', function (pointer) {
-        if (pointer.y > 240) this.onSpinPressed();
+        if (pointer.y > 240 && !(this.pillBounds && this.pillBounds.contains(pointer.x, pointer.y))) {
+          this.onSpinPressed();
+        }
       }, this);
 
       this.spinBtn = btn; this.spinSub = sub; this.spinLabel = label;
@@ -693,8 +710,35 @@
       this.tweens.add({ targets: this.hint, y: 1060, alpha: 0.55, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     },
 
+    // ── Persistent install CTA (visible throughout, like top-performing ads) ──
+    buildInstallPill: function () {
+      var px = W - 24 - 150, py = H - 24 - 54;
+      this.pillBounds = new Phaser.Geom.Rectangle(px, py, 150, 54);
+      var pill = this.add.container(px + 75, py + 27).setDepth(90);
+      var g = this.add.graphics();
+      g.fillStyle(0x1b8f3a, 1); g.fillRoundedRect(-75, -27, 150, 54, 27);
+      g.lineStyle(3, 0xffe27a, 1); g.strokeRoundedRect(-75, -27, 150, 54, 27);
+      var t = this.add.text(0, 0, 'INSTALL', {
+        fontFamily: 'Arial Black, Arial', fontSize: '22px', color: '#ffffff'
+      }).setOrigin(0.5);
+      pill.add([g, t]);
+      pill.setSize(150, 54);
+      pill.setInteractive(new Phaser.Geom.Rectangle(-75, -27, 150, 54), Phaser.Geom.Rectangle.Contains);
+      pill.on('pointerdown', function () { PlayableAd.install(); });
+    },
+
+    // ── Social-proof winners ticker ────────────────────────────────────────────
+    buildTicker: function () {
+      var t = this.add.text(24, H - 44, PlayableAd.socialFeed(), {
+        fontFamily: 'Arial', fontSize: '22px', color: '#c9bfe6'
+      }).setOrigin(0, 0.5).setAlpha(0.85).setDepth(90);
+      this.time.addEvent({ delay: 2600, loop: true, callback: function () {
+        t.setText(PlayableAd.socialFeed());
+      } });
+    },
+
     onSpinPressed: function () {
-      if (this.spinning || this.freeSpins <= 0) return;
+      if (this.spinning || this.chestOpen || this.freeSpins <= 0) return;
       SFX.unlock(); SFX.click();
       if (this.hint) { this.hint.destroy(); this.hint = null; }
       this.startSpin();
@@ -780,12 +824,67 @@
         this.highlightWin();
         SFX.win();
         this.addWinning(outcome.win);
-        // prompt the next (jackpot) spin
-        this.spinBtn.setAlpha(1);
-        this.btnPulse.resume();
-        this.spinSub.setText('SPIN AGAIN!');
         this.flashText('+' + outcome.win.toLocaleString(), '#ffe27a');
+        // after the first (teaser) win, offer the pick-a-chest bonus round —
+        // gives the player a real choice before the jackpot spin
+        if (this.scriptIndex === 1) {
+          this.chestOpen = true;   // lock spins now; overlay appears after the win beat
+          this.time.delayedCall(1300, this.showChestBonus, [], this);
+        } else {
+          this.enableSpin();
+        }
       }
+    },
+
+    enableSpin: function () {
+      this.spinBtn.setAlpha(1);
+      this.btnPulse.resume();
+      this.spinSub.setText('SPIN AGAIN!');
+    },
+
+    // ── Pick-a-chest bonus round (player agency between spins) ────────────────
+    showChestBonus: function () {
+      var self = this;
+      PlayableAd.track('bonus_offered');
+      var ov = this.add.container(0, 0).setDepth(70);
+      var dim = this.add.rectangle(0, 0, W, H, 0x05030c, 0.8).setOrigin(0).setInteractive();
+      ov.add(dim);
+      var title = this.add.text(W / 2, 400, 'BONUS!', {
+        fontFamily: 'Arial Black, Arial', fontSize: '72px', color: '#ffd23c'
+      }).setOrigin(0.5).setShadow(0, 4, '#7a1010', 6);
+      var sub = this.add.text(W / 2, 470, 'Pick a chest', {
+        fontFamily: 'Arial', fontSize: '34px', color: '#ffffff'
+      }).setOrigin(0.5);
+      ov.add([title, sub]);
+      [200, 360, 520].forEach(function (x, i) {
+        var chest = self.add.text(x, 660, '🎁', {
+          fontFamily: '"Segoe UI Emoji", Arial', fontSize: '96px'
+        }).setOrigin(0.5);
+        self.tweens.add({ targets: chest, y: 636, duration: 480 + i * 130, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+        // generous finger-sized tap zone (emoji text bounds are unreliable targets)
+        var zone = self.add.zone(x, 648, 160, 170).setInteractive();
+        zone.once('pointerdown', function () { self.pickChest(ov, chest); });
+        ov.add([chest, zone]);
+      });
+    },
+
+    pickChest: function (ov, chest) {
+      if (this.chestPicked) return;   // one pick only — other chests keep bobbing
+      this.chestPicked = true;
+      var self = this;
+      var BONUS = 2500;
+      PlayableAd.track('bonus_pick');
+      this.tweens.add({ targets: chest, scale: 1.5, angle: { from: -8, to: 8 }, duration: 160, yoyo: true, repeat: 1 });
+      chest.setText('💰');
+      this.coins.explode(24, chest.x, chest.y);
+      SFX.win();
+      this.addWinning(BONUS);
+      this.flashText('+' + BONUS.toLocaleString() + ' BONUS!', '#ffd23c');
+      this.time.delayedCall(1200, function () {
+        ov.destroy();
+        self.chestOpen = false;
+        self.enableSpin();
+      });
     },
 
     // pulse the three centre-row symbols + glow the payline
@@ -855,7 +954,7 @@
       var title = this.add.text(W / 2, 360, 'LUCKY VEGAS', {
         fontFamily: 'Arial Black, Arial', fontSize: '76px', color: '#ffe27a'
       }).setOrigin(0.5).setShadow(0, 4, '#5a1014', 6);
-      var sub = this.add.text(W / 2, 450, 'Your JACKPOT is waiting!', {
+      var sub = this.add.text(W / 2, 450, 'Claim your ' + balance.toLocaleString() + ' coins!', {
         fontFamily: 'Arial', fontSize: '34px', color: '#ffffff'
       }).setOrigin(0.5);
       overlay.add([title, sub]);
@@ -871,8 +970,8 @@
       g.fillStyle(0x1b8f3a, 1); g.fillRoundedRect(-220, -62, 440, 124, 32);
       g.fillStyle(0x2bd659, 1); g.fillRoundedRect(-220, -62, 440, 106, 32);
       g.lineStyle(5, 0xffffff, 1); g.strokeRoundedRect(-220, -62, 440, 124, 32);
-      var ct = this.add.text(0, -4, 'PLAY NOW', {
-        fontFamily: 'Arial Black, Arial', fontSize: '58px', color: '#ffffff'
+      var ct = this.add.text(0, -4, 'CLAIM NOW', {
+        fontFamily: 'Arial Black, Arial', fontSize: '54px', color: '#ffffff'
       }).setOrigin(0.5).setShadow(0, 3, '#0a4a1c', 4);
       var cs = this.add.text(0, 40, 'FREE TO INSTALL', { fontFamily: 'Arial', fontSize: '20px', color: '#d6ffe0' }).setOrigin(0.5);
       cta.add([g, ct, cs]);

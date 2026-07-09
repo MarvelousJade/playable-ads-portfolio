@@ -52,17 +52,30 @@ async function main() {
     page.setDefaultTimeout(20000);   // fail fast instead of hanging
     const errors = [];
     const extraRequests = [];
-    page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+    const logs = [];
+    page.on('console', m => {
+      logs.push(m.text());
+      if (m.type() === 'error') errors.push(m.text());
+    });
     page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
     page.on('request', r => {
       const u = r.url();
       if (u !== base + urlPath && !u.startsWith('data:') && !u.includes('favicon')) extraRequests.push(u);
     });
+    // wait until the game logs a given analytics event (robust vs cold-start slowness)
+    const waitLog = async (needle, ms = 15000) => {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        if (logs.some(l => l.includes(needle))) return;
+        await sleep(150);
+      }
+      throw new Error(`timeout waiting for "${needle}"`);
+    };
     try {
       await page.goto(base + urlPath, { waitUntil: 'load' });
       await sleep(1600);
       await page.screenshot({ path: path.join(shots, name + '.png') });   // identity shot → landing thumb
-      await drive(page);
+      await drive(page, waitLog);
       await page.screenshot({ path: path.join(shots, name + '-end.png') });
     } catch (e) {
       errors.push('THROW: ' + e.message);
@@ -70,6 +83,11 @@ async function main() {
     // network-spec check: a single-file build must make zero extra requests
     if (opts.singleFile && extraRequests.length) {
       errors.push('NOT SELF-CONTAINED, requested: ' + extraRequests.join(', '));
+    }
+    // funnel check: the drive must actually reach the install end card —
+    // a run that stalls mid-funnel is a failure even with a clean console
+    if (opts.expectEndcard && !logs.some(l => l.includes('endcard_shown'))) {
+      errors.push('FUNNEL INCOMPLETE: end card never shown');
     }
     const ok = errors.length === 0;
     if (!ok) failures++;
@@ -79,39 +97,58 @@ async function main() {
     await ctx.close();
   }
 
-  const driveSlots = async (page) => {
-    await tap(page, 360, 1130); await sleep(3000);   // spin 1
-    await tap(page, 360, 1130); await sleep(4600);   // spin 2 → jackpot → end card
+  // hold-to-charge press (wheel): press, let the power meter oscillate, release
+  const holdRelease = async (page, x, y, ms) => {
+    await page.mouse.move(x, y - 50); await page.mouse.move(x, y);
+    await page.mouse.down(); await sleep(ms); await page.mouse.up();
   };
-  const driveWheel = async (page) => {
-    await tap(page, 360, 1140); await sleep(5200);   // spin 1
-    await tap(page, 360, 1140); await sleep(7400);   // spin 2 → jackpot → end card
-  };
-  const driveScratch = async (page) => {
+  const scratchPass = async (page) => {
     for (let y = 440; y <= 950; y += 55) {
       await page.mouse.move(120, y); await page.mouse.down();
       for (let x = 120; x <= 600; x += 18) await page.mouse.move(x, y);
       await page.mouse.up();
     }
-    await sleep(2600);
+  };
+
+  const driveSlots = async (page, waitLog) => {
+    await tap(page, 360, 1130);                       // spin 1 → teaser win
+    await waitLog('bonus_offered'); await sleep(500); // chest overlay up
+    await tap(page, 360, 655);                        // pick middle chest
+    await waitLog('bonus_pick'); await sleep(1600);   // bonus paid, spin re-enabled
+    await tap(page, 360, 1130);                       // spin 2 → jackpot
+    await waitLog('endcard_shown'); await sleep(900); // end card faded in
+  };
+  const driveWheel = async (page) => {
+    await holdRelease(page, 360, 1140, 600); await sleep(6000);   // charge+spin 1
+    await holdRelease(page, 360, 1140, 600); await sleep(8200);   // charge+spin 2 → jackpot → end card
+  };
+  const driveScratch = async (page) => {
+    await scratchPass(page); await sleep(4400);      // reveal → win → bonus card unlock
+    await scratchPass(page); await sleep(2600);      // bonus reveal → win → end card
   };
 
   // Source demos
-  await run('slots', '/slots/', driveSlots);
-  await run('wheel', '/wheel/', driveWheel);
-  await run('scratch', '/scratch/', driveScratch);
+  const funnel = { expectEndcard: true };
+  await run('slots', '/slots/', driveSlots, funnel);
+  await run('wheel', '/wheel/', driveWheel, funnel);
+  await run('scratch', '/scratch/', driveScratch, funnel);
 
   // A/B variant B (slots: 3-spin funnel with a near-miss)
-  await run('slots-vb', '/slots/?v=b', async (page) => {
-    await tap(page, 360, 1130); await sleep(3000);   // spin 1: teaser win
-    await tap(page, 360, 1130); await sleep(3000);   // spin 2: near-miss
-    await tap(page, 360, 1130); await sleep(4600);   // spin 3 → jackpot → end card
-  });
+  await run('slots-vb', '/slots/?v=b', async (page, waitLog) => {
+    await tap(page, 360, 1130);                       // spin 1: teaser win
+    await waitLog('bonus_offered'); await sleep(500);
+    await tap(page, 360, 655);                        // pick middle chest
+    await waitLog('bonus_pick'); await sleep(1600);
+    await tap(page, 360, 1130); await sleep(3800);    // spin 2: near-miss
+    await tap(page, 360, 1130);                       // spin 3 → jackpot
+    await waitLog('endcard_shown'); await sleep(900);
+  }, funnel);
 
   // Single-file network builds — must run AND make zero external requests
-  await run('slots-dist', '/dist/slots.html', driveSlots, { singleFile: true });
-  await run('wheel-dist', '/dist/wheel.html', driveWheel, { singleFile: true });
-  await run('scratch-dist', '/dist/scratch.html', driveScratch, { singleFile: true });
+  const dist = { singleFile: true, expectEndcard: true };
+  await run('slots-dist', '/dist/slots.html', driveSlots, dist);
+  await run('wheel-dist', '/dist/wheel.html', driveWheel, dist);
+  await run('scratch-dist', '/dist/scratch.html', driveScratch, dist);
 
   // Landing page
   await run('landing', '/', async () => {});

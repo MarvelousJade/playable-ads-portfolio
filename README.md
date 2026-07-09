@@ -7,9 +7,9 @@ user-acquisition playables follow.
 
 | # | Demo | Engine | Mechanic | Folder |
 |---|------|--------|----------|--------|
-| 1 | **Lucky Vegas Slots** | Phaser 3 | 3×3 reels, anticipation, payline win, 777 jackpot | [`/slots`](slots/index.html) |
-| 2 | **Spin to Win** | Pixi.js 7 | Weighted prize wheel, eased spin, jackpot landing | [`/wheel`](wheel/index.html) |
-| 3 | **Lucky Scratch** | Vanilla Canvas 2D | Touch scratch-off reveal, match-3 win | [`/scratch`](scratch/index.html) |
+| 1 | **Lucky Vegas Slots** | Phaser 3 | 3×3 reels, anticipation, payline win, pick-a-chest bonus, 777 jackpot | [`/slots`](slots/index.html) |
+| 2 | **Spin to Win** | Pixi.js 7 | Hold-to-charge power meter, weighted wheel, eased spin, jackpot landing | [`/wheel`](wheel/index.html) |
+| 3 | **Lucky Scratch** | Vanilla Canvas 2D | Touch scratch-off reveal, match-3 win, unlockable bonus card | [`/scratch`](scratch/index.html) |
 
 Open [`index.html`](index.html) for the portfolio landing page that links all three.
 
@@ -26,8 +26,11 @@ scratch) but each one proves a **different competency**:
   performance-optimization skill with no framework overhead.
 
 Together they cover the full "playable funnel": an attract loop to grab the tap,
-a scripted teaser win to teach the mechanic, a guaranteed jackpot celebration,
-and a forced install end-card with a universal CTA.
+a scripted teaser win to teach the mechanic, a mid-funnel interaction beat
+(pick-a-chest / hold-to-charge / bonus card) for real player agency, a guaranteed
+jackpot celebration, and a claim-framed install end-card. Each demo also carries
+the patterns of top-performing playables: a **persistent install CTA** and a
+**social-proof winners ticker** visible throughout play.
 
 ## How it maps to the job spec
 

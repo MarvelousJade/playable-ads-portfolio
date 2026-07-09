@@ -126,6 +126,16 @@
     }
   }
 
+  // ── Social-proof winners feed ──────────────────────────────────────────────
+  // Top playables (e.g. Blackout Bingo) show a rotating "X just won Y" strip.
+  // Deterministic off the clock so all engines just render the same string.
+  var FEED_NAMES = ['Mia', 'Jake', 'Ana', 'Leo', 'Zoe', 'Sam', 'Ivy', 'Max', 'Eva', 'Tom'];
+  function socialFeed() {
+    var i = Math.floor(Date.now() / 2600) % FEED_NAMES.length;
+    var amt = 2000 + ((i * 7919) % 23) * 500;
+    return '🎉 ' + FEED_NAMES[i] + ' just won ' + amt.toLocaleString() + ' coins!';
+  }
+
   // Lightweight analytics hook — wire to the network's event API in production.
   function track(event, data) {
     try {
@@ -142,6 +152,7 @@
     onPauseChange: onPauseChange,
     isPaused: isPaused,
     variant: variant,
+    socialFeed: socialFeed,
     track: track,
     isIOS: isIOS,
     storeUrl: storeUrl

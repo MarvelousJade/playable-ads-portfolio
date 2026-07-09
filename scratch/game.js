@@ -15,17 +15,31 @@
 
   var CARD = { x: 80, y: 392, w: 560, h: 600 };
   // Real Twemoji art (assets/*.png, CC-BY 4.0); three matches = guaranteed win.
-  // Grid layout / prize are A/B variant data (?v=b), not code.
+  // Grid layout / prizes are A/B variant data (?v=b), not code. Each variant is
+  // a two-round funnel: main card, then an unlocked bonus card (progression).
   var VARIANTS = {
-    a: { grid: ['cherry', 'gem', 'bell', 'star', 'cherry', 'gem', 'coin', 'lemon', 'gem'],
-         winSymbol: 'gem', winAmount: 25000 },
-    b: { grid: ['star', 'cherry', 'lemon', 'bell', 'star', 'coin', 'gem', 'star', 'bell'],
-         winSymbol: 'star', winAmount: 50000 }
+    a: {
+      main:  { grid: ['cherry', 'gem', 'bell', 'star', 'cherry', 'gem', 'coin', 'lemon', 'gem'],
+               winSymbol: 'gem', winAmount: 25000, header: 'MATCH 3 TO WIN' },
+      bonus: { grid: ['star', 'coin', 'star', 'lemon', 'star', 'bell', 'cherry', 'gem', 'coin'],
+               winSymbol: 'star', winAmount: 50000, header: 'BONUS — MATCH 3' }
+    },
+    b: {
+      main:  { grid: ['star', 'cherry', 'lemon', 'bell', 'star', 'coin', 'gem', 'star', 'bell'],
+               winSymbol: 'star', winAmount: 50000, header: 'MATCH 3 TO WIN' },
+      bonus: { grid: ['gem', 'lemon', 'gem', 'coin', 'bell', 'gem', 'star', 'cherry', 'coin'],
+               winSymbol: 'gem', winAmount: 25000, header: 'BONUS — MATCH 3' }
+    }
   };
   var V = VARIANTS[PlayableAd.variant()] || VARIANTS.a;
-  var GRID = V.grid, WIN_SYMBOL = V.winSymbol, WIN_AMOUNT = V.winAmount;
-  var WIN_CELLS = [];                                  // filled during build
-  GRID.forEach(function (s, i) { if (s === WIN_SYMBOL) WIN_CELLS.push(i); });
+  var round = 1, totalWon = 0;
+  var GRID, WIN_SYMBOL, WIN_AMOUNT, WIN_CELLS = [];
+  function setRound(cfg) {
+    GRID = cfg.grid; WIN_SYMBOL = cfg.winSymbol; WIN_AMOUNT = cfg.winAmount;
+    WIN_CELLS = [];
+    GRID.forEach(function (s, i) { if (s === WIN_SYMBOL) WIN_CELLS.push(i); });
+  }
+  setRound(V.main);
 
   var balance = 1000;
   var state = 'scratch';          // scratch | revealing | win | endcard
@@ -75,8 +89,9 @@
     return { x: ox + col * (size + gap), y: oy + row * (size + gap), s: size };
   }
 
-  function buildPrize() {
+  function buildPrize(header) {
     var c = prize.getContext('2d');
+    c.clearRect(0, 0, CARD.w, CARD.h);
     // card face
     var g = c.createLinearGradient(0, 0, 0, CARD.h);
     g.addColorStop(0, '#fffef5'); g.addColorStop(1, '#ffe9c2');
@@ -86,7 +101,7 @@
     c.fillStyle = '#7a1f25';
     c.font = '900 38px Arial Black, Arial';
     c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText('MATCH 3 TO WIN', CARD.w / 2, 50);
+    c.fillText(header, CARD.w / 2, 50);
     c.font = '900 26px Arial';
     c.fillStyle = '#b07a12';
     c.fillText('★ scratch the panel below ★', CARD.w / 2, 88);
@@ -109,6 +124,8 @@
 
   function buildFoil() {
     var c = foil.getContext('2d');
+    c.clearRect(0, 0, CARD.w, CARD.h);
+    c.globalCompositeOperation = 'source-over';
     var g = c.createLinearGradient(0, 0, CARD.w, CARD.h);
     g.addColorStop(0, '#c9ced6'); g.addColorStop(0.5, '#9aa1ad'); g.addColorStop(1, '#bcc3cd');
     roundRect(c, 0, 0, CARD.w, CARD.h, 28); c.fillStyle = g; c.fill();
@@ -203,7 +220,7 @@
   function reveal() {
     if (state !== 'scratch') return;
     state = 'revealing';
-    PlayableAd.track('scratch_revealed');
+    PlayableAd.track('scratch_revealed', { round: round });
     var t0 = performance.now();
     (function fade() {
       foilAlpha = Math.max(0, 1 - (performance.now() - t0) / 350);
@@ -217,7 +234,28 @@
     SFX.bigWin();
     burstCoins(60);
     addWinning(WIN_AMOUNT);
-    setTimeout(function () { state = 'endcard'; PlayableAd.track('endcard_shown'); }, 1900);
+    totalWon += WIN_AMOUNT;
+    if (round === 1) {
+      // progression beat: unlock a second, bigger-feeling card before the CTA
+      setTimeout(startBonusRound, 1900);
+    } else {
+      setTimeout(function () { state = 'endcard'; PlayableAd.track('endcard_shown'); }, 1900);
+    }
+  }
+
+  function startBonusRound() {
+    state = 'bonusintro';
+    PlayableAd.track('bonus_unlocked');
+    SFX.win();
+    setTimeout(function () {
+      round = 2;
+      setRound(V.bonus);
+      buildPrize(V.bonus.header);
+      buildFoil();
+      foilAlpha = 1;
+      scratchPct = 0;
+      state = 'scratch';
+    }, 1700);
   }
 
   function addWinning(amount) {
@@ -304,9 +342,21 @@
     ctx.font = '900 70px Arial Black, Arial';
     ctx.fillText('LUCKY SCRATCH', W / 2, 392);
     ctx.fillStyle = '#fff'; ctx.font = '400 34px Arial';
-    ctx.fillText('You won ' + WIN_AMOUNT.toLocaleString() + ' coins!', W / 2, 470);
+    ctx.fillText('Claim your ' + totalWon.toLocaleString() + ' coins!', W / 2, 470);
     if (IMAGES[WIN_SYMBOL]) ctx.drawImage(IMAGES[WIN_SYMBOL], W / 2 - 95, 580, 190, 190);
-    drawButton(W / 2 - 220, 905, 440, 124, '#2bd659', 'PLAY NOW', 'FREE TO INSTALL');
+    drawButton(W / 2 - 220, 905, 440, 124, '#2bd659', 'CLAIM NOW', 'FREE TO INSTALL');
+  }
+
+  function drawBonusIntro() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,3,12,0.72)'; ctx.fillRect(0, CARD.y, W, CARD.h);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd23c'; ctx.font = '900 56px Arial Black, Arial';
+    ctx.fillText('BONUS CARD', W / 2, CARD.y + CARD.h / 2 - 40);
+    ctx.fillText('UNLOCKED!', W / 2, CARD.y + CARD.h / 2 + 28);
+    ctx.fillStyle = '#fff'; ctx.font = '400 28px Arial';
+    ctx.fillText('Scratch again for a bigger prize', W / 2, CARD.y + CARD.h / 2 + 96);
+    ctx.restore();
   }
 
   // ── Main loop ───────────────────────────────────────────────────────────────
@@ -319,7 +369,8 @@
     ctx.drawImage(prize, CARD.x, CARD.y);
     if (foilAlpha > 0) { ctx.globalAlpha = foilAlpha; ctx.drawImage(foil, CARD.x, CARD.y); ctx.globalAlpha = 1; }
 
-    if (state === 'win' || state === 'endcard') drawWinHighlight();
+    if (state === 'win') drawWinHighlight();
+    if (state === 'bonusintro') drawBonusIntro();
 
     updateParticles();
     for (var i = 0; i < particles.length; i++) drawCoin(ctx, particles[i].x, particles[i].y, particles[i].r, particles[i].rot);
@@ -331,7 +382,7 @@
       ctx.fillStyle = '#ffe27a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = '900 30px Arial Black, Arial';
       ctx.globalAlpha = 0.6 + 0.4 * Math.sin(hintT);
-      ctx.fillText('Scratch to reveal your prize!', W / 2, 1080);
+      ctx.fillText(round === 2 ? 'Scratch the BONUS card!' : 'Scratch to reveal your prize!', W / 2, 1080);
       ctx.globalAlpha = 1;
     }
 
@@ -339,6 +390,14 @@
     if (state === 'endcard') {
       drawEndCard();
       hitRegions.push({ x: 0, y: 0, w: W, h: H, fn: function () { PlayableAd.install(); } });
+    } else {
+      // persistent install CTA + social-proof ticker (like top-performing ads)
+      drawButton(W - 24 - 150, H - 24 - 54, 150, 54, '#2bd659', 'INSTALL');
+      hitRegions.push({ x: W - 24 - 150, y: H - 24 - 54, w: 150, h: 54, fn: function () { PlayableAd.install(); } });
+      ctx.fillStyle = 'rgba(201,191,230,0.85)'; ctx.font = '400 20px Arial';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(PlayableAd.socialFeed(), 24, H - 48);
+      ctx.textAlign = 'center';
     }
     // mute is always tappable
     hitRegions.push({ x: W - 92, y: 64, w: 64, h: 64, fn: function () { muted = SFX.toggleMuted(); } });
@@ -348,7 +407,7 @@
 
   // ── Boot ────────────────────────────────────────────────────────────────────
   function boot() {
-    buildBg(); buildPrize(); buildFoil();
+    buildBg(); buildPrize(V.main.header); buildFoil();
     fit(); window.addEventListener('resize', fit);
 
     stage.addEventListener('mousedown', onDown);

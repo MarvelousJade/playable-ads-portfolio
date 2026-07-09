@@ -43,6 +43,7 @@
   var balance = 1000;
   var app, wheel, spinning = false, scriptIndex = 0;
   var balanceText, spinBtn, hintText, coinTex, coins = [];
+  var charging = false, chargeT0 = 0, chargeBar, chargeFill, lastPower = 0.5;
 
   // ── Texture helpers ─────────────────────────────────────────────────────────
   function makeGradientTexture(w, h, top, bottom) {
@@ -202,19 +203,68 @@
 
   function buildControls() {
     var subLabel = SCRIPT.length + ' FREE SPIN' + (SCRIPT.length === 1 ? '' : 'S');
-    spinBtn = makeButton('SPIN', subLabel, 320, 120, 0x2bd659, onSpinPressed);
+    spinBtn = makeButton('SPIN', subLabel, 320, 120, 0x2bd659, startCharge);
     spinBtn.x = CX; spinBtn.y = 1140;
     app.stage.addChild(spinBtn);
     pulse(spinBtn);
 
-    hintText = txt('👆 TAP TO SPIN', 30, 0xffe27a, '900');
+    hintText = txt('👆 HOLD TO CHARGE, RELEASE TO SPIN', 26, 0xffe27a, '900');
     hintText.anchor.set(0.5); hintText.x = CX; hintText.y = 1035;
     app.stage.addChild(hintText);
     pulse(hintText, 1.0, 0.5);
 
-    // tapping the wheel also spins
+    // holding the wheel also charges
     wheel.eventMode = 'static'; wheel.cursor = 'pointer';
-    wheel.on('pointerdown', onSpinPressed);
+    wheel.on('pointerdown', startCharge);
+
+    // release anywhere fires the spin
+    app.stage.eventMode = 'static';
+    app.stage.hitArea = app.screen;
+    app.stage.on('pointerup', releaseCharge);
+    app.stage.on('pointerupoutside', releaseCharge);
+
+    buildChargeBar();
+  }
+
+  // ── Hold-to-charge power meter (real interaction, like top-performing ads) ──
+  function buildChargeBar() {
+    chargeBar = new PIXI.Container();
+    var frame = new PIXI.Graphics();
+    frame.lineStyle(4, 0xffe27a, 1).beginFill(0x1d1030, 0.9)
+      .drawRoundedRect(CX - 180, 980, 360, 34, 17).endFill();
+    chargeBar.addChild(frame);
+    chargeFill = new PIXI.Graphics();
+    chargeBar.addChild(chargeFill);
+    var label = txt('POWER', 18, 0xffe27a, '900');
+    label.anchor.set(0.5); label.x = CX; label.y = 997;
+    chargeBar.addChild(label);
+    chargeBar.visible = false;
+    app.stage.addChild(chargeBar);
+
+    app.ticker.add(function () {
+      if (!charging) return;
+      // oscillating meter — the release moment is the player's "skill" input
+      lastPower = (Math.sin((nowMs() - chargeT0) / 180) + 1) / 2;
+      chargeFill.clear();
+      chargeFill.beginFill(lastPower > 0.8 ? 0xffd23c : 0x2bd659, 1)
+        .drawRoundedRect(CX - 174, 986, 348 * Math.max(0.06, lastPower), 22, 11).endFill();
+    });
+  }
+
+  function startCharge() {
+    if (spinning || charging || scriptIndex >= SCRIPT.length) return;
+    SFX.unlock(); SFX.click();
+    charging = true;
+    chargeT0 = nowMs();
+    chargeBar.visible = true;
+    if (hintText) hintText.visible = false;
+  }
+
+  function releaseCharge() {
+    if (!charging) return;
+    charging = false;
+    chargeBar.visible = false;
+    spin(Math.max(0.15, lastPower));
   }
 
   function pulse(obj, base, toAlpha) {
@@ -227,28 +277,23 @@
     });
   }
 
-  function onSpinPressed() {
-    if (spinning || scriptIndex >= SCRIPT.length) return;
-    SFX.unlock(); SFX.click();
-    if (hintText) { hintText.visible = false; }
-    spin();
-  }
-
   // ── Spin ────────────────────────────────────────────────────────────────────
-  function spin() {
+  function spin(power) {
     spinning = true;
     spinBtn.alpha = 0.5;
     var outcome = SCRIPT[scriptIndex++];
-    PlayableAd.track('wheel_spin', { n: scriptIndex });
+    PlayableAd.track('wheel_spin', { n: scriptIndex, power: Math.round(power * 100) });
 
-    // compute final rotation so segment center lands under the top pointer
+    // compute final rotation so segment center lands under the top pointer;
+    // charge power sets how many full turns the wheel travels (outcome is scripted)
+    var turns = 4 + Math.round(power * 3);
     var pointer = -Math.PI / 2;
     var center = outcome.index * STEP + STEP / 2;
     var from = wheel.rotation;
     var base = ((pointer - center) % (Math.PI * 2));
     var fromMod = ((from % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     var delta = (((base - fromMod) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    var to = from + Math.PI * 2 * 5 + delta;   // 5 full turns + settle
+    var to = from + Math.PI * 2 * turns + delta;
 
     var lastSeg = -1;   // wheel uses per-segment ticks (below) — no continuous whir
     animate(outcome.dur || 4200, easeOutQuart,
@@ -359,13 +404,13 @@
     overlay.addChild(dim);
 
     var title = txt('SPIN TO WIN', 72, 0xffe27a, '900'); title.anchor.set(0.5); title.x = CX; title.y = 360;
-    var sub = txt('Your JACKPOT is waiting!', 32, 0xffffff, '400'); sub.anchor.set(0.5); sub.x = CX; sub.y = 446;
+    var sub = txt('Claim your ' + balance.toLocaleString() + ' coins!', 32, 0xffffff, '400'); sub.anchor.set(0.5); sub.x = CX; sub.y = 446;
     overlay.addChild(title); overlay.addChild(sub);
 
     var coin = new PIXI.Sprite(coinTex); coin.anchor.set(0.5); coin.x = CX; coin.y = 640; coin.scale.set(3.4);
     overlay.addChild(coin);
 
-    var cta = makeButton('PLAY NOW', 'FREE TO INSTALL', 440, 124, 0x2bd659, function () { PlayableAd.install(); });
+    var cta = makeButton('CLAIM NOW', 'FREE TO INSTALL', 440, 124, 0x2bd659, function () { PlayableAd.install(); });
     cta.x = CX; cta.y = 940; overlay.addChild(cta);
 
     app.stage.addChild(overlay);
@@ -387,6 +432,17 @@
     buildPointer();
     buildHUD();
     buildControls();
+
+    // persistent install CTA (visible throughout, like top-performing ads)
+    var pill = makeButton('INSTALL', null, 170, 56, 0x2bd659, function () { PlayableAd.install(); });
+    pill.x = W - 24 - 85; pill.y = H - 24 - 28;
+    app.stage.addChild(pill);
+
+    // social-proof winners ticker
+    var feed = txt(PlayableAd.socialFeed(), 20, 0xc9bfe6, '400');
+    feed.anchor.set(0, 0.5); feed.x = 24; feed.y = H - 48; feed.alpha = 0.85;
+    app.stage.addChild(feed);
+    setInterval(function () { feed.text = PlayableAd.socialFeed(); }, 2600);
 
     fit();
     window.addEventListener('resize', fit);
