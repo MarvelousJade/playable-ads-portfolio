@@ -78,6 +78,7 @@
     .letter.hinted { animation:hintPulse .7s ease 2; }
     .instruction { margin-top:7px; color:#1b5b52; font-size:clamp(12px,2.5vw,17px); font-weight:800; text-align:center; text-shadow:0 1px rgba(255,255,255,.7); }
     .hint-btn { margin-top:6px; border:0; border-radius:16px; padding:6px 13px; color:#22675e; background:rgba(255,255,255,.72); font-size:12px; font-weight:900; cursor:pointer; }
+    .hint-btn:disabled { opacity:.68; cursor:default; }
 
     .endcard { position:fixed; z-index:20; inset:0; display:grid; place-items:center; padding:calc(20px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left)); background:rgba(9,48,44,.72); backdrop-filter:blur(7px); opacity:0; visibility:hidden; transition:opacity .35s, visibility .35s; }
     .endcard.show { opacity:1; visibility:visible; }
@@ -100,7 +101,7 @@
       .hook { font-size:clamp(17px,3vw,29px); margin-bottom:2px; }
       .board { width:min(38vw, 66vh, 390px); }
       .wheel { width:min(35vw, 62vh, 350px); }
-      .candidate { height:29px; }
+      .candidate { height:29px; font-size:clamp(18px,2.5vw,28px); }
       .instruction { margin-top:4px; }
       .sun { top:10%; }
       .end-panel { width:min(74vw,560px); padding:24px 38px; }
@@ -596,6 +597,8 @@
   var selecting = false;
   var locked = false;
   var hintGeneration = 0;
+  var hintWord = '';
+  var hintDepth = 0;
   var cellByKey = {};
 
   // A small pause-aware scheduler keeps funnel transitions from completing while
@@ -773,6 +776,8 @@
   function acceptWord(word, wordIndex) {
     locked = true;
     found[word.text] = true;
+    hintWord = '';
+    hintDepth = 0;
     candidate.textContent = word.text;
     candidate.className = 'candidate success';
     SFX.win();
@@ -834,27 +839,45 @@
     PlayableAd.track('endcard_shown');
   }
 
-  function showHint() {
+  function showHint(advance) {
     var next = null;
     for (var i = 0; i < creative.words.length; i++) {
       if (!found[creative.words[i].text]) { next = creative.words[i]; break; }
     }
     if (!next) return;
-    var first = creative.letters.indexOf(next.text.charAt(0));
-    if (first >= 0) {
-      letterButtons[first].classList.remove('hinted');
-      void letterButtons[first].offsetWidth;
-      letterButtons[first].classList.add('hinted');
+
+    // The first hint supplies the starting letter. Each deliberate press of the
+    // hint button advances one more character instead of repeating the same tip.
+    if (hintWord !== next.text) {
+      hintWord = next.text;
+      hintDepth = 0;
     }
-    candidate.textContent = 'START WITH ' + next.text.charAt(0);
+    if (hintDepth === 0 || advance) hintDepth = Math.min(next.text.length, hintDepth + 1);
+
+    var hintedLetter = next.text.charAt(hintDepth - 1);
+    var wheelIndex = creative.letters.indexOf(hintedLetter);
+    if (wheelIndex >= 0) {
+      letterButtons[wheelIndex].classList.remove('hinted');
+      void letterButtons[wheelIndex].offsetWidth;
+      letterButtons[wheelIndex].classList.add('hinted');
+    }
+
+    var prefix = next.text.slice(0, hintDepth).split('').join(' → ');
+    candidate.textContent = hintDepth === 1 ? 'START WITH ' + hintedLetter : 'NEXT: ' + hintedLetter + '  ·  ' + prefix;
     candidate.className = 'candidate';
-    PlayableAd.track('hint_used', { wordLength: next.text.length });
+    var hintButton = document.getElementById('hint');
+    hintButton.textContent = hintDepth < next.text.length ? 'Show next letter' : 'Word revealed';
+    hintButton.disabled = hintDepth >= next.text.length;
+    PlayableAd.track('hint_used', { wordLength: next.text.length, letterPosition: hintDepth });
   }
 
   function resetHintTimer() {
     var generation = ++hintGeneration;
+    var hintButton = document.getElementById('hint');
+    hintButton.disabled = false;
+    hintButton.textContent = hintDepth ? 'Show next letter' : 'Need a hint?';
     after(config.timing.hintDelayMs, function () {
-      if (generation === hintGeneration && !selecting && !locked) showHint();
+      if (generation === hintGeneration && !selecting && !locked) showHint(false);
     });
   }
 
@@ -862,7 +885,7 @@
     window.addEventListener('pointermove', onPointerMove, { passive: false });
     window.addEventListener('pointerup', finishSelection);
     window.addEventListener('pointercancel', finishSelection);
-    document.getElementById('hint').addEventListener('click', function () { hintGeneration++; showHint(); });
+    document.getElementById('hint').addEventListener('click', function () { hintGeneration++; showHint(true); });
     document.getElementById('mute').addEventListener('click', function () {
       var muted = SFX.toggleMuted();
       this.textContent = muted ? '🔇' : '🔊';

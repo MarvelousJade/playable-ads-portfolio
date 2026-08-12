@@ -19,6 +19,8 @@
   var selecting = false;
   var locked = false;
   var hintGeneration = 0;
+  var hintWord = '';
+  var hintDepth = 0;
   var cellByKey = {};
 
   // A small pause-aware scheduler keeps funnel transitions from completing while
@@ -196,6 +198,8 @@
   function acceptWord(word, wordIndex) {
     locked = true;
     found[word.text] = true;
+    hintWord = '';
+    hintDepth = 0;
     candidate.textContent = word.text;
     candidate.className = 'candidate success';
     SFX.win();
@@ -257,27 +261,45 @@
     PlayableAd.track('endcard_shown');
   }
 
-  function showHint() {
+  function showHint(advance) {
     var next = null;
     for (var i = 0; i < creative.words.length; i++) {
       if (!found[creative.words[i].text]) { next = creative.words[i]; break; }
     }
     if (!next) return;
-    var first = creative.letters.indexOf(next.text.charAt(0));
-    if (first >= 0) {
-      letterButtons[first].classList.remove('hinted');
-      void letterButtons[first].offsetWidth;
-      letterButtons[first].classList.add('hinted');
+
+    // The first hint supplies the starting letter. Each deliberate press of the
+    // hint button advances one more character instead of repeating the same tip.
+    if (hintWord !== next.text) {
+      hintWord = next.text;
+      hintDepth = 0;
     }
-    candidate.textContent = 'START WITH ' + next.text.charAt(0);
+    if (hintDepth === 0 || advance) hintDepth = Math.min(next.text.length, hintDepth + 1);
+
+    var hintedLetter = next.text.charAt(hintDepth - 1);
+    var wheelIndex = creative.letters.indexOf(hintedLetter);
+    if (wheelIndex >= 0) {
+      letterButtons[wheelIndex].classList.remove('hinted');
+      void letterButtons[wheelIndex].offsetWidth;
+      letterButtons[wheelIndex].classList.add('hinted');
+    }
+
+    var prefix = next.text.slice(0, hintDepth).split('').join(' → ');
+    candidate.textContent = hintDepth === 1 ? 'START WITH ' + hintedLetter : 'NEXT: ' + hintedLetter + '  ·  ' + prefix;
     candidate.className = 'candidate';
-    PlayableAd.track('hint_used', { wordLength: next.text.length });
+    var hintButton = document.getElementById('hint');
+    hintButton.textContent = hintDepth < next.text.length ? 'Show next letter' : 'Word revealed';
+    hintButton.disabled = hintDepth >= next.text.length;
+    PlayableAd.track('hint_used', { wordLength: next.text.length, letterPosition: hintDepth });
   }
 
   function resetHintTimer() {
     var generation = ++hintGeneration;
+    var hintButton = document.getElementById('hint');
+    hintButton.disabled = false;
+    hintButton.textContent = hintDepth ? 'Show next letter' : 'Need a hint?';
     after(config.timing.hintDelayMs, function () {
-      if (generation === hintGeneration && !selecting && !locked) showHint();
+      if (generation === hintGeneration && !selecting && !locked) showHint(false);
     });
   }
 
@@ -285,7 +307,7 @@
     window.addEventListener('pointermove', onPointerMove, { passive: false });
     window.addEventListener('pointerup', finishSelection);
     window.addEventListener('pointercancel', finishSelection);
-    document.getElementById('hint').addEventListener('click', function () { hintGeneration++; showHint(); });
+    document.getElementById('hint').addEventListener('click', function () { hintGeneration++; showHint(true); });
     document.getElementById('mute').addEventListener('click', function () {
       var muted = SFX.toggleMuted();
       this.textContent = muted ? '🔇' : '🔊';

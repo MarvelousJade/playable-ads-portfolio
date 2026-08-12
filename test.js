@@ -141,6 +141,10 @@ async function main() {
   };
 
   const driveWord = async (page, waitLog) => {
+    await page.locator('#hint').click();
+    if (!((await page.locator('#candidate').textContent()) || '').includes('START WITH P')) throw new Error('first hint did not show P');
+    await page.locator('#hint').click();
+    if (!((await page.locator('#candidate').textContent()) || '').includes('NEXT: L')) throw new Error('second hint did not advance to L');
     await swipeWord(page, 'PLAN');
     // Exercise the short-screen composition before rotating the same session.
     await page.setViewportSize({ width: 320, height: 480 });
