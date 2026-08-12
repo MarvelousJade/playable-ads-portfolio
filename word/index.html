@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#86cfee" />
+  <title>Word Trails — Adaptive Playable Ad</title>
+  <style>
+    :root {
+      --ink: #173d3a;
+      --cream: #fffaf0;
+      --yellow: #ffd85a;
+      --green: #2db86d;
+      --green-dark: #16814a;
+      --panel: rgba(255, 255, 255, .9);
+      --shadow: 0 12px 30px rgba(28, 72, 66, .2);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body {
+      color: var(--ink); background: #86cfee;
+      font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+      -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+      touch-action: none; overscroll-behavior: none;
+    }
+    button { font: inherit; }
+    .world { position: fixed; inset: 0; overflow: hidden; background: linear-gradient(#78caee 0 50%, #dff2d0 50% 100%); }
+    .sun { position: absolute; width: min(18vw, 120px); aspect-ratio: 1; border-radius: 50%; right: 7%; top: 8%;
+      background: #fff2a5; box-shadow: 0 0 0 16px rgba(255,242,165,.18), 0 0 55px rgba(255,244,162,.8); }
+    .cloud { position: absolute; width: 150px; height: 38px; border-radius: 40px; background: rgba(255,255,255,.7); animation: drift 18s linear infinite; }
+    .cloud::before, .cloud::after { content:""; position:absolute; border-radius:50%; background:inherit; }
+    .cloud::before { width: 64px; height: 64px; left: 24px; bottom: 0; }
+    .cloud::after { width: 80px; height: 80px; right: 20px; bottom: 0; }
+    .cloud.one { top: 13%; left: -170px; }
+    .cloud.two { top: 29%; left: -210px; transform: scale(.7); animation-delay: -8s; animation-duration: 24s; }
+    .mountain { position: absolute; left: -10%; right: -10%; bottom: 28%; height: 35%; clip-path: polygon(0 100%, 0 78%, 12% 46%, 23% 74%, 39% 26%, 52% 70%, 66% 38%, 80% 73%, 91% 48%, 100% 78%, 100% 100%); }
+    .mountain.far { background: #a7d7be; transform: translateY(-42px) scale(1.08); opacity: .82; }
+    .mountain.near { background: #61ad7c; }
+    .meadow { position: absolute; left: -5%; right: -5%; bottom: -10%; height: 46%; border-radius: 50% 50% 0 0; background: linear-gradient(#8bce73, #3d9b5e); }
+    .trail { position:absolute; width:42%; height:48%; left:29%; bottom:-26%; border-radius:50%; background:#f6d58e; transform:perspective(300px) rotateX(58deg); opacity:.85; }
+    .flowers { position: absolute; inset: 0; pointer-events: none; }
+    .flower { position:absolute; bottom:8%; font-size:clamp(24px,5vw,52px); opacity:0; transform:translateY(24px) scale(.1); filter:drop-shadow(0 5px 3px rgba(20,70,40,.2)); }
+    .flower:nth-child(1) { left: 8%; }.flower:nth-child(2) { left: 20%; bottom:18%; }.flower:nth-child(3) { right:18%; bottom:14%; }
+    .flower.bloom { animation: bloom .65s cubic-bezier(.2,1.65,.45,1) forwards; }
+
+    #app { position: relative; width: 100%; height: 100dvh; min-height: 100%; display:flex; flex-direction:column;
+      padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    .topbar { z-index:2; flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; min-height:54px; gap:10px; }
+    .brand { display:flex; align-items:center; gap:9px; color:#fff; text-shadow:0 2px 8px rgba(20,70,70,.35); }
+    .brand-mark { display:grid; place-items:center; width:42px; aspect-ratio:1; border-radius:14px; background:linear-gradient(145deg,#fff47e,#ffc53d); box-shadow:0 5px 0 #d99b23; font-size:24px; }
+    .brand strong { display:block; font-size:clamp(19px,3.4vw,31px); line-height:.9; letter-spacing:.02em; }
+    .brand small { display:block; margin-top:5px; font-weight:800; font-size:10px; letter-spacing:.18em; opacity:.85; }
+    .top-actions { display:flex; align-items:center; gap:8px; }
+    .icon-btn, .mini-cta { border:0; cursor:pointer; color:#fff; box-shadow:0 4px 0 rgba(13,91,56,.8); }
+    .icon-btn { width:42px; aspect-ratio:1; border-radius:50%; background:rgba(20,75,72,.72); font-size:20px; }
+    .mini-cta { min-height:40px; border-radius:22px; padding:0 16px; background:linear-gradient(#42d581,#22aa61); font-size:13px; font-weight:900; letter-spacing:.04em; }
+    .play-area { position:relative; z-index:1; flex:1 1 auto; min-height:0; display:grid; align-content:center; grid-template-columns:1fr; gap:8px; }
+    .puzzle, .interaction { min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .hook { max-width:620px; text-align:center; color:#164640; font-size:clamp(18px,3.7vw,32px); line-height:1.05; font-weight:900; text-wrap:balance; margin-bottom:5px; text-shadow:0 1px rgba(255,255,255,.75); }
+    .progress { display:flex; align-items:center; gap:8px; margin:2px 0 6px; color:#22635c; font-size:12px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .progress-dots { display:flex; gap:5px; }
+    .progress-dot { width:10px; height:10px; border-radius:50%; border:2px solid rgba(23,91,78,.45); background:rgba(255,255,255,.5); transition:.25s; }
+    .progress-dot.done { background:var(--yellow); border-color:#dc9e26; transform:scale(1.15); }
+    .board { display:grid; gap:clamp(3px,.7vw,7px); width:min(72vw, 38vh, 390px); aspect-ratio:5/6; filter:drop-shadow(0 12px 12px rgba(30,79,63,.18)); }
+    .cell { display:grid; place-items:center; min-width:0; border-radius:clamp(6px,1.4vw,13px); background:linear-gradient(145deg,#fff,#f5f1df); border:2px solid rgba(30,99,82,.22); box-shadow:inset 0 -4px 0 rgba(42,110,90,.1); color:#18594f; font-size:clamp(18px,4.8vw,38px); font-weight:900; text-transform:uppercase; }
+    .cell.empty { visibility:hidden; }
+    .cell.just-revealed { animation:letterPop .52s cubic-bezier(.2,1.7,.45,1); background:linear-gradient(145deg,#fff7a7,#ffd85a); }
+    .interaction { position:relative; }
+    .candidate { height:34px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:clamp(22px,4vw,34px); font-weight:900; letter-spacing:.12em; text-shadow:0 2px 5px rgba(16,67,56,.35); }
+    .candidate.success { color:#fff8a6; animation:wordSuccess .5s ease; }
+    .candidate.error { color:#b9333e; animation:shake .35s ease; }
+    .wheel { position:relative; width:min(70vw, 34vh, 350px); aspect-ratio:1; border-radius:50%; background:rgba(255,255,255,.9); border:clamp(5px,1vw,9px) solid rgba(255,255,255,.6); box-shadow:var(--shadow), inset 0 0 0 2px rgba(30,99,82,.12); touch-action:none; }
+    .trace { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+    .trace polyline { fill:none; stroke:#ffc83d; stroke-width:7; stroke-linecap:round; stroke-linejoin:round; opacity:.85; filter:drop-shadow(0 2px 2px rgba(130,86,0,.25)); }
+    .letter { position:absolute; z-index:2; transform:translate(-50%,-50%); width:clamp(46px,14vw,74px); aspect-ratio:1; border:0; border-radius:50%; cursor:pointer; color:#174f48; background:linear-gradient(#fffef8,#e8f3e6); box-shadow:0 6px 0 #aed2bd, 0 8px 15px rgba(29,88,74,.18); font-size:clamp(22px,7vw,38px); font-weight:900; touch-action:none; transition:transform .1s, background .15s, color .15s; }
+    .letter.selected { transform:translate(-50%,-50%) scale(1.09); color:#fff; background:linear-gradient(#ffd95c,#f4ad29); box-shadow:0 5px 0 #ca811e; }
+    .letter.hinted { animation:hintPulse .7s ease 2; }
+    .instruction { margin-top:7px; color:#1b5b52; font-size:clamp(12px,2.5vw,17px); font-weight:800; text-align:center; text-shadow:0 1px rgba(255,255,255,.7); }
+    .hint-btn { margin-top:6px; border:0; border-radius:16px; padding:6px 13px; color:#22675e; background:rgba(255,255,255,.72); font-size:12px; font-weight:900; cursor:pointer; }
+
+    .endcard { position:fixed; z-index:20; inset:0; display:grid; place-items:center; padding:calc(20px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left)); background:rgba(9,48,44,.72); backdrop-filter:blur(7px); opacity:0; visibility:hidden; transition:opacity .35s, visibility .35s; }
+    .endcard.show { opacity:1; visibility:visible; }
+    .end-panel { width:min(92vw,560px); padding:clamp(24px,5vh,54px) clamp(20px,6vw,48px); border-radius:32px; text-align:center; background:linear-gradient(160deg,#fffdf2,#e9f7de); border:5px solid #fff; box-shadow:0 25px 70px rgba(0,35,33,.38); transform:translateY(20px) scale(.94); transition:transform .45s cubic-bezier(.2,1.4,.4,1); }
+    .endcard.show .end-panel { transform:none; }
+    .end-icon { font-size:clamp(70px,18vw,118px); animation:bob 1.2s ease-in-out infinite; }
+    .end-panel h2 { margin:8px 0; color:#15594d; font-size:clamp(30px,7vw,52px); line-height:1; text-wrap:balance; }
+    .end-panel p { margin:0 auto 22px; max-width:420px; color:#4b7069; font-size:clamp(15px,3.4vw,20px); line-height:1.35; }
+    .end-cta { width:100%; min-height:clamp(68px,12vh,92px); border:0; border-radius:24px; cursor:pointer; color:#fff; background:linear-gradient(#43db82,#20aa60); box-shadow:0 8px 0 #117a43,0 14px 28px rgba(20,128,70,.25); font-size:clamp(22px,5vw,32px); font-weight:900; text-shadow:0 2px rgba(0,80,38,.3); animation:ctaPulse 1.1s ease-in-out infinite; }
+    .end-cta small { display:block; margin-top:3px; font-size:12px; font-weight:700; letter-spacing:.08em; }
+    #loader { position:fixed; z-index:50; inset:0; display:grid; place-items:center; color:#18594f; background:#ccefcf; font-size:13px; font-weight:900; letter-spacing:.18em; transition:opacity .3s; }
+    #loader.hide { opacity:0; pointer-events:none; }
+
+    @media (orientation: landscape) {
+      #app { padding-top:max(6px,env(safe-area-inset-top)); padding-bottom:max(6px,env(safe-area-inset-bottom)); }
+      .topbar { min-height:46px; }
+      .brand-mark { width:36px; border-radius:11px; font-size:20px; }
+      .brand small { display:none; }
+      .play-area { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:clamp(8px,3vw,42px); padding:0 3vw; }
+      .hook { font-size:clamp(17px,3vw,29px); margin-bottom:2px; }
+      .board { width:min(38vw, 66vh, 390px); }
+      .wheel { width:min(35vw, 62vh, 350px); }
+      .candidate { height:29px; }
+      .instruction { margin-top:4px; }
+      .sun { top:10%; }
+      .end-panel { width:min(74vw,560px); padding:24px 38px; }
+      .end-icon { font-size:min(17vh,100px); }
+    }
+    @media (max-height: 500px) and (orientation: landscape) {
+      .hook { display:none; }
+      .progress { margin:0 0 3px; }
+      .play-area { padding-bottom:2px; }
+      .instruction { font-size:12px; }
+      .hint-btn { padding:4px 11px; margin-top:3px; }
+    }
+    @media (max-height: 600px) and (orientation: portrait) {
+      .topbar { min-height:43px; }
+      .brand-mark { width:34px; font-size:18px; border-radius:10px; }
+      .brand small, .hook { display:none; }
+      .board { width:min(64vw,32vh); }
+      .wheel { width:min(64vw,31vh); }
+      .candidate { height:25px; font-size:20px; }
+      .instruction { margin-top:2px; font-size:11px; }
+      .hint-btn { margin-top:3px; padding:4px 11px; }
+      .cell { font-size:17px; border-width:1px; }
+    }
+    @media (max-width: 390px) { .mini-cta { padding:0 11px; font-size:11px; }.top-actions{gap:5px}.brand strong{font-size:18px} }
+    body.paused *, body.paused *::before, body.paused *::after { animation-play-state:paused!important; }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
+
+    @keyframes drift { to { transform:translateX(calc(100vw + 380px)); } }
+    @keyframes bloom { to { opacity:1; transform:translateY(0) scale(1); } }
+    @keyframes letterPop { 0%{transform:scale(.25) rotate(-10deg)} 70%{transform:scale(1.18)} 100%{transform:none} }
+    @keyframes wordSuccess { 50%{transform:scale(1.14)} }
+    @keyframes shake { 25%{transform:translateX(-10px)} 50%{transform:translateX(9px)} 75%{transform:translateX(-5px)} }
+    @keyframes hintPulse { 50%{transform:translate(-50%,-50%) scale(1.16); box-shadow:0 0 0 10px rgba(255,216,90,.35),0 6px 0 #aed2bd} }
+    @keyframes bob { 50%{transform:translateY(-8px) rotate(3deg)} }
+    @keyframes ctaPulse { 50%{transform:scale(1.025)} }
+  </style>
+</head>
+<body>
+  <div class="world" aria-hidden="true">
+    <div class="sun"></div><div class="cloud one"></div><div class="cloud two"></div>
+    <div class="mountain far"></div><div class="mountain near"></div><div class="meadow"></div><div class="trail"></div>
+    <div class="flowers"><span class="flower">🌻</span><span class="flower">🌷</span><span class="flower">🌼</span></div>
+  </div>
+
+  <main id="app" aria-label="Word Trails playable ad">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">🌿</span><span><strong>WORD TRAILS</strong><small>RELAX · CONNECT · GROW</small></span></div>
+      <div class="top-actions">
+        <button id="mute" class="icon-btn" type="button" aria-label="Mute sound">🔊</button>
+        <button class="mini-cta install" type="button">PLAY FREE</button>
+      </div>
+    </header>
+
+    <section class="play-area">
+      <div class="puzzle">
+        <h1 id="hook" class="hook"></h1>
+        <div class="progress"><span>Garden progress</span><span id="progress-dots" class="progress-dots"></span></div>
+        <div id="board" class="board" role="grid" aria-label="Crossword board"></div>
+      </div>
+      <div class="interaction">
+        <div id="candidate" class="candidate" aria-live="polite"></div>
+        <div id="wheel" class="wheel" aria-label="Letter wheel">
+          <svg class="trace" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline id="trace-line" points=""></polyline></svg>
+        </div>
+        <p id="instruction" class="instruction"></p>
+        <button id="hint" class="hint-btn" type="button">Need a hint?</button>
+      </div>
+    </section>
+  </main>
+
+  <section id="endcard" class="endcard" aria-hidden="true">
+    <div class="end-panel">
+      <div class="end-icon">🌻</div>
+      <h2 id="end-title"></h2>
+      <p id="end-copy"></p>
+      <button class="end-cta install" type="button">PLAY WORD TRAILS<small>FREE TO INSTALL</small></button>
+    </div>
+  </section>
+
+  <div id="loader">GROWING A NEW PUZZLE…</div>
+
+  <script src="../shared/sfx.js"></script>
+  <script src="../shared/playable.js"></script>
+  <script id="creative-config" type="application/json" data-src="creative.json"></script>
+  <script src="game.js"></script>
+</body>
+</html>

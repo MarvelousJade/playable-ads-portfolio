@@ -1,0 +1,40 @@
+{
+  "$schema": "./creative.schema.json",
+  "id": "word-trails",
+  "title": "Word Trails",
+  "version": 1,
+  "timing": {
+    "hintDelayMs": 3200,
+    "endCardDelayMs": 1300
+  },
+  "variants": {
+    "a": {
+      "hook": "Bring the garden back to life",
+      "instruction": "Swipe the letters to find each word",
+      "letters": ["P", "L", "A", "N", "T"],
+      "rows": 6,
+      "cols": 5,
+      "words": [
+        { "text": "PLAN", "cells": [[2, 0], [3, 0], [4, 0], [5, 0]] },
+        { "text": "ANT", "cells": [[2, 2], [3, 2], [4, 2]] },
+        { "text": "PLANT", "cells": [[2, 0], [2, 1], [2, 2], [2, 3], [2, 4]] }
+      ],
+      "endTitle": "The garden is growing!",
+      "endCopy": "Discover peaceful word puzzles and beautiful new landscapes."
+    },
+    "b": {
+      "hook": "Turn every word into a new view",
+      "instruction": "Connect letters to complete the trail",
+      "letters": ["S", "T", "O", "N", "E"],
+      "rows": 6,
+      "cols": 5,
+      "words": [
+        { "text": "TONE", "cells": [[2, 1], [3, 1], [4, 1], [5, 1]] },
+        { "text": "ONE", "cells": [[2, 2], [3, 2], [4, 2]] },
+        { "text": "STONE", "cells": [[2, 0], [2, 1], [2, 2], [2, 3], [2, 4]] }
+      ],
+      "endTitle": "A new trail awaits!",
+      "endCopy": "Relax with satisfying word puzzles wherever you go."
+    }
+  }
+}

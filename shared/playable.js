@@ -15,9 +15,13 @@
   'use strict';
 
   // ── Store destinations (swap per campaign) ───────────────────────────────
-  var CONFIG = {
-    iosUrl: 'https://apps.apple.com/app/id000000000',
-    androidUrl: 'https://play.google.com/store/apps/details?id=com.example.socialcasino'
+  // Delivery wrappers inject window.PLAYABLE_CONFIG with real campaign URLs.
+  // The repository defaults return browser-preview clicks to the portfolio and
+  // deliberately avoid pretending that these original concepts are store apps.
+  var CONFIG = global.PLAYABLE_CONFIG || {
+    iosUrl: 'https://apps.apple.com/us/genre/ios-games/id6014',
+    androidUrl: 'https://play.google.com/store/games',
+    previewUrl: '../'
   };
 
   // ── A/B variant selection ─────────────────────────────────────────────────
@@ -62,10 +66,10 @@
       } else if (global.mintegral && global.mintegral.openUrl) {   // Mintegral
         global.mintegral.openUrl(url);
       } else {
-        global.open(url, '_blank');                                // preview / web fallback
+        global.open(CONFIG.previewUrl || url, '_blank');           // portfolio preview
       }
     } catch (e) {
-      global.open(url, '_blank');
+      global.open(CONFIG.previewUrl || url, '_blank');
     }
   }
 
@@ -98,11 +102,50 @@
   // a compliant playable must not run or make sound while hidden. This folds
   // MRAID viewability and the Page Visibility API into one signal.
   var paused = false;
+  var pausedAt = 0;
+  var totalPaused = 0;
   var pauseCbs = [];
+
+  // Shared gameplay clock + timers. Native setTimeout/setInterval continue while
+  // an ad is preloaded off-screen, which can skip an interaction or reveal an
+  // end card before the player sees the game. These helpers freeze with the
+  // same lifecycle signal used by rendering and audio.
+  var timerId = 0;
+  var timers = [];
+  function realNow() { return global.performance && performance.now ? performance.now() : Date.now(); }
+  function now() {
+    var n = realNow();
+    return n - totalPaused - (paused ? n - pausedAt : 0);
+  }
+  function schedule(fn, ms, repeat) {
+    var task = { id: ++timerId, at: now() + ms, ms: ms, repeat: !!repeat, fn: fn };
+    timers.push(task);
+    return task.id;
+  }
+  function delay(fn, ms) { return schedule(fn, ms, false); }
+  function every(fn, ms) { return schedule(fn, ms, true); }
+  function cancelTimer(id) {
+    for (var i = timers.length - 1; i >= 0; i--) if (timers[i].id === id) timers.splice(i, 1);
+  }
+  (function timerFrame() {
+    if (!paused) {
+      var n = now();
+      for (var i = timers.length - 1; i >= 0; i--) {
+        var task = timers[i];
+        if (n < task.at) continue;
+        if (task.repeat) task.at = n + task.ms;
+        else timers.splice(i, 1);
+        try { task.fn(); } catch (e) { if (global.console && console.error) console.error(e); }
+      }
+    }
+    global.requestAnimationFrame(timerFrame);
+  })();
 
   function setPaused(p) {
     p = !!p;
     if (p === paused) return;
+    if (p) pausedAt = realNow();
+    else { totalPaused += realNow() - pausedAt; pausedAt = 0; }
     paused = p;
     track(p ? 'paused' : 'resumed');
     for (var i = 0; i < pauseCbs.length; i++) {
@@ -110,7 +153,14 @@
     }
   }
 
-  function onPauseChange(cb) { pauseCbs.push(cb); }
+  function onPauseChange(cb) {
+    pauseCbs.push(cb);
+    // Late subscribers (games created after MRAID ready) must inherit an
+    // initial not-viewable state instead of waiting for the next transition.
+    if (paused) {
+      try { cb(true); } catch (e) { if (global.console && console.error) console.error(e); }
+    }
+  }
   function isPaused() { return paused; }
 
   function wirePauseSources() {
@@ -124,16 +174,6 @@
       // some SDKs report not-viewable at start (ad preloaded off-screen)
       if (mraid.isViewable && !mraid.isViewable()) setPaused(true);
     }
-  }
-
-  // ── Social-proof winners feed ──────────────────────────────────────────────
-  // Top playables (e.g. Blackout Bingo) show a rotating "X just won Y" strip.
-  // Deterministic off the clock so all engines just render the same string.
-  var FEED_NAMES = ['Mia', 'Jake', 'Ana', 'Leo', 'Zoe', 'Sam', 'Ivy', 'Max', 'Eva', 'Tom'];
-  function socialFeed() {
-    var i = Math.floor(Date.now() / 2600) % FEED_NAMES.length;
-    var amt = 2000 + ((i * 7919) % 23) * 500;
-    return '🎉 ' + FEED_NAMES[i] + ' just won ' + amt.toLocaleString() + ' coins!';
   }
 
   // Lightweight analytics hook — wire to the network's event API in production.
@@ -152,8 +192,11 @@
     onPauseChange: onPauseChange,
     isPaused: isPaused,
     variant: variant,
-    socialFeed: socialFeed,
     track: track,
+    now: now,
+    delay: delay,
+    every: every,
+    cancelTimer: cancelTimer,
     isIOS: isIOS,
     storeUrl: storeUrl
   };

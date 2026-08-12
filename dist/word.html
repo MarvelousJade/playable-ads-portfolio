@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#86cfee" />
+  <title>Word Trails — Adaptive Playable Ad</title>
+  <style>
+    :root {
+      --ink: #173d3a;
+      --cream: #fffaf0;
+      --yellow: #ffd85a;
+      --green: #2db86d;
+      --green-dark: #16814a;
+      --panel: rgba(255, 255, 255, .9);
+      --shadow: 0 12px 30px rgba(28, 72, 66, .2);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body {
+      color: var(--ink); background: #86cfee;
+      font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+      -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+      touch-action: none; overscroll-behavior: none;
+    }
+    button { font: inherit; }
+    .world { position: fixed; inset: 0; overflow: hidden; background: linear-gradient(#78caee 0 50%, #dff2d0 50% 100%); }
+    .sun { position: absolute; width: min(18vw, 120px); aspect-ratio: 1; border-radius: 50%; right: 7%; top: 8%;
+      background: #fff2a5; box-shadow: 0 0 0 16px rgba(255,242,165,.18), 0 0 55px rgba(255,244,162,.8); }
+    .cloud { position: absolute; width: 150px; height: 38px; border-radius: 40px; background: rgba(255,255,255,.7); animation: drift 18s linear infinite; }
+    .cloud::before, .cloud::after { content:""; position:absolute; border-radius:50%; background:inherit; }
+    .cloud::before { width: 64px; height: 64px; left: 24px; bottom: 0; }
+    .cloud::after { width: 80px; height: 80px; right: 20px; bottom: 0; }
+    .cloud.one { top: 13%; left: -170px; }
+    .cloud.two { top: 29%; left: -210px; transform: scale(.7); animation-delay: -8s; animation-duration: 24s; }
+    .mountain { position: absolute; left: -10%; right: -10%; bottom: 28%; height: 35%; clip-path: polygon(0 100%, 0 78%, 12% 46%, 23% 74%, 39% 26%, 52% 70%, 66% 38%, 80% 73%, 91% 48%, 100% 78%, 100% 100%); }
+    .mountain.far { background: #a7d7be; transform: translateY(-42px) scale(1.08); opacity: .82; }
+    .mountain.near { background: #61ad7c; }
+    .meadow { position: absolute; left: -5%; right: -5%; bottom: -10%; height: 46%; border-radius: 50% 50% 0 0; background: linear-gradient(#8bce73, #3d9b5e); }
+    .trail { position:absolute; width:42%; height:48%; left:29%; bottom:-26%; border-radius:50%; background:#f6d58e; transform:perspective(300px) rotateX(58deg); opacity:.85; }
+    .flowers { position: absolute; inset: 0; pointer-events: none; }
+    .flower { position:absolute; bottom:8%; font-size:clamp(24px,5vw,52px); opacity:0; transform:translateY(24px) scale(.1); filter:drop-shadow(0 5px 3px rgba(20,70,40,.2)); }
+    .flower:nth-child(1) { left: 8%; }.flower:nth-child(2) { left: 20%; bottom:18%; }.flower:nth-child(3) { right:18%; bottom:14%; }
+    .flower.bloom { animation: bloom .65s cubic-bezier(.2,1.65,.45,1) forwards; }
+
+    #app { position: relative; width: 100%; height: 100dvh; min-height: 100%; display:flex; flex-direction:column;
+      padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    .topbar { z-index:2; flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; min-height:54px; gap:10px; }
+    .brand { display:flex; align-items:center; gap:9px; color:#fff; text-shadow:0 2px 8px rgba(20,70,70,.35); }
+    .brand-mark { display:grid; place-items:center; width:42px; aspect-ratio:1; border-radius:14px; background:linear-gradient(145deg,#fff47e,#ffc53d); box-shadow:0 5px 0 #d99b23; font-size:24px; }
+    .brand strong { display:block; font-size:clamp(19px,3.4vw,31px); line-height:.9; letter-spacing:.02em; }
+    .brand small { display:block; margin-top:5px; font-weight:800; font-size:10px; letter-spacing:.18em; opacity:.85; }
+    .top-actions { display:flex; align-items:center; gap:8px; }
+    .icon-btn, .mini-cta { border:0; cursor:pointer; color:#fff; box-shadow:0 4px 0 rgba(13,91,56,.8); }
+    .icon-btn { width:42px; aspect-ratio:1; border-radius:50%; background:rgba(20,75,72,.72); font-size:20px; }
+    .mini-cta { min-height:40px; border-radius:22px; padding:0 16px; background:linear-gradient(#42d581,#22aa61); font-size:13px; font-weight:900; letter-spacing:.04em; }
+    .play-area { position:relative; z-index:1; flex:1 1 auto; min-height:0; display:grid; align-content:center; grid-template-columns:1fr; gap:8px; }
+    .puzzle, .interaction { min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .hook { max-width:620px; text-align:center; color:#164640; font-size:clamp(18px,3.7vw,32px); line-height:1.05; font-weight:900; text-wrap:balance; margin-bottom:5px; text-shadow:0 1px rgba(255,255,255,.75); }
+    .progress { display:flex; align-items:center; gap:8px; margin:2px 0 6px; color:#22635c; font-size:12px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+    .progress-dots { display:flex; gap:5px; }
+    .progress-dot { width:10px; height:10px; border-radius:50%; border:2px solid rgba(23,91,78,.45); background:rgba(255,255,255,.5); transition:.25s; }
+    .progress-dot.done { background:var(--yellow); border-color:#dc9e26; transform:scale(1.15); }
+    .board { display:grid; gap:clamp(3px,.7vw,7px); width:min(72vw, 38vh, 390px); aspect-ratio:5/6; filter:drop-shadow(0 12px 12px rgba(30,79,63,.18)); }
+    .cell { display:grid; place-items:center; min-width:0; border-radius:clamp(6px,1.4vw,13px); background:linear-gradient(145deg,#fff,#f5f1df); border:2px solid rgba(30,99,82,.22); box-shadow:inset 0 -4px 0 rgba(42,110,90,.1); color:#18594f; font-size:clamp(18px,4.8vw,38px); font-weight:900; text-transform:uppercase; }
+    .cell.empty { visibility:hidden; }
+    .cell.just-revealed { animation:letterPop .52s cubic-bezier(.2,1.7,.45,1); background:linear-gradient(145deg,#fff7a7,#ffd85a); }
+    .interaction { position:relative; }
+    .candidate { height:34px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:clamp(22px,4vw,34px); font-weight:900; letter-spacing:.12em; text-shadow:0 2px 5px rgba(16,67,56,.35); }
+    .candidate.success { color:#fff8a6; animation:wordSuccess .5s ease; }
+    .candidate.error { color:#b9333e; animation:shake .35s ease; }
+    .wheel { position:relative; width:min(70vw, 34vh, 350px); aspect-ratio:1; border-radius:50%; background:rgba(255,255,255,.9); border:clamp(5px,1vw,9px) solid rgba(255,255,255,.6); box-shadow:var(--shadow), inset 0 0 0 2px rgba(30,99,82,.12); touch-action:none; }
+    .trace { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+    .trace polyline { fill:none; stroke:#ffc83d; stroke-width:7; stroke-linecap:round; stroke-linejoin:round; opacity:.85; filter:drop-shadow(0 2px 2px rgba(130,86,0,.25)); }
+    .letter { position:absolute; z-index:2; transform:translate(-50%,-50%); width:clamp(46px,14vw,74px); aspect-ratio:1; border:0; border-radius:50%; cursor:pointer; color:#174f48; background:linear-gradient(#fffef8,#e8f3e6); box-shadow:0 6px 0 #aed2bd, 0 8px 15px rgba(29,88,74,.18); font-size:clamp(22px,7vw,38px); font-weight:900; touch-action:none; transition:transform .1s, background .15s, color .15s; }
+    .letter.selected { transform:translate(-50%,-50%) scale(1.09); color:#fff; background:linear-gradient(#ffd95c,#f4ad29); box-shadow:0 5px 0 #ca811e; }
+    .letter.hinted { animation:hintPulse .7s ease 2; }
+    .instruction { margin-top:7px; color:#1b5b52; font-size:clamp(12px,2.5vw,17px); font-weight:800; text-align:center; text-shadow:0 1px rgba(255,255,255,.7); }
+    .hint-btn { margin-top:6px; border:0; border-radius:16px; padding:6px 13px; color:#22675e; background:rgba(255,255,255,.72); font-size:12px; font-weight:900; cursor:pointer; }
+
+    .endcard { position:fixed; z-index:20; inset:0; display:grid; place-items:center; padding:calc(20px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left)); background:rgba(9,48,44,.72); backdrop-filter:blur(7px); opacity:0; visibility:hidden; transition:opacity .35s, visibility .35s; }
+    .endcard.show { opacity:1; visibility:visible; }
+    .end-panel { width:min(92vw,560px); padding:clamp(24px,5vh,54px) clamp(20px,6vw,48px); border-radius:32px; text-align:center; background:linear-gradient(160deg,#fffdf2,#e9f7de); border:5px solid #fff; box-shadow:0 25px 70px rgba(0,35,33,.38); transform:translateY(20px) scale(.94); transition:transform .45s cubic-bezier(.2,1.4,.4,1); }
+    .endcard.show .end-panel { transform:none; }
+    .end-icon { font-size:clamp(70px,18vw,118px); animation:bob 1.2s ease-in-out infinite; }
+    .end-panel h2 { margin:8px 0; color:#15594d; font-size:clamp(30px,7vw,52px); line-height:1; text-wrap:balance; }
+    .end-panel p { margin:0 auto 22px; max-width:420px; color:#4b7069; font-size:clamp(15px,3.4vw,20px); line-height:1.35; }
+    .end-cta { width:100%; min-height:clamp(68px,12vh,92px); border:0; border-radius:24px; cursor:pointer; color:#fff; background:linear-gradient(#43db82,#20aa60); box-shadow:0 8px 0 #117a43,0 14px 28px rgba(20,128,70,.25); font-size:clamp(22px,5vw,32px); font-weight:900; text-shadow:0 2px rgba(0,80,38,.3); animation:ctaPulse 1.1s ease-in-out infinite; }
+    .end-cta small { display:block; margin-top:3px; font-size:12px; font-weight:700; letter-spacing:.08em; }
+    #loader { position:fixed; z-index:50; inset:0; display:grid; place-items:center; color:#18594f; background:#ccefcf; font-size:13px; font-weight:900; letter-spacing:.18em; transition:opacity .3s; }
+    #loader.hide { opacity:0; pointer-events:none; }
+
+    @media (orientation: landscape) {
+      #app { padding-top:max(6px,env(safe-area-inset-top)); padding-bottom:max(6px,env(safe-area-inset-bottom)); }
+      .topbar { min-height:46px; }
+      .brand-mark { width:36px; border-radius:11px; font-size:20px; }
+      .brand small { display:none; }
+      .play-area { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:clamp(8px,3vw,42px); padding:0 3vw; }
+      .hook { font-size:clamp(17px,3vw,29px); margin-bottom:2px; }
+      .board { width:min(38vw, 66vh, 390px); }
+      .wheel { width:min(35vw, 62vh, 350px); }
+      .candidate { height:29px; }
+      .instruction { margin-top:4px; }
+      .sun { top:10%; }
+      .end-panel { width:min(74vw,560px); padding:24px 38px; }
+      .end-icon { font-size:min(17vh,100px); }
+    }
+    @media (max-height: 500px) and (orientation: landscape) {
+      .hook { display:none; }
+      .progress { margin:0 0 3px; }
+      .play-area { padding-bottom:2px; }
+      .instruction { font-size:12px; }
+      .hint-btn { padding:4px 11px; margin-top:3px; }
+    }
+    @media (max-height: 600px) and (orientation: portrait) {
+      .topbar { min-height:43px; }
+      .brand-mark { width:34px; font-size:18px; border-radius:10px; }
+      .brand small, .hook { display:none; }
+      .board { width:min(64vw,32vh); }
+      .wheel { width:min(64vw,31vh); }
+      .candidate { height:25px; font-size:20px; }
+      .instruction { margin-top:2px; font-size:11px; }
+      .hint-btn { margin-top:3px; padding:4px 11px; }
+      .cell { font-size:17px; border-width:1px; }
+    }
+    @media (max-width: 390px) { .mini-cta { padding:0 11px; font-size:11px; }.top-actions{gap:5px}.brand strong{font-size:18px} }
+    body.paused *, body.paused *::before, body.paused *::after { animation-play-state:paused!important; }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
+
+    @keyframes drift { to { transform:translateX(calc(100vw + 380px)); } }
+    @keyframes bloom { to { opacity:1; transform:translateY(0) scale(1); } }
+    @keyframes letterPop { 0%{transform:scale(.25) rotate(-10deg)} 70%{transform:scale(1.18)} 100%{transform:none} }
+    @keyframes wordSuccess { 50%{transform:scale(1.14)} }
+    @keyframes shake { 25%{transform:translateX(-10px)} 50%{transform:translateX(9px)} 75%{transform:translateX(-5px)} }
+    @keyframes hintPulse { 50%{transform:translate(-50%,-50%) scale(1.16); box-shadow:0 0 0 10px rgba(255,216,90,.35),0 6px 0 #aed2bd} }
+    @keyframes bob { 50%{transform:translateY(-8px) rotate(3deg)} }
+    @keyframes ctaPulse { 50%{transform:scale(1.025)} }
+  </style>
+</head>
+<body>
+  <div class="world" aria-hidden="true">
+    <div class="sun"></div><div class="cloud one"></div><div class="cloud two"></div>
+    <div class="mountain far"></div><div class="mountain near"></div><div class="meadow"></div><div class="trail"></div>
+    <div class="flowers"><span class="flower">🌻</span><span class="flower">🌷</span><span class="flower">🌼</span></div>
+  </div>
+
+  <main id="app" aria-label="Word Trails playable ad">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">🌿</span><span><strong>WORD TRAILS</strong><small>RELAX · CONNECT · GROW</small></span></div>
+      <div class="top-actions">
+        <button id="mute" class="icon-btn" type="button" aria-label="Mute sound">🔊</button>
+        <button class="mini-cta install" type="button">PLAY FREE</button>
+      </div>
+    </header>
+
+    <section class="play-area">
+      <div class="puzzle">
+        <h1 id="hook" class="hook"></h1>
+        <div class="progress"><span>Garden progress</span><span id="progress-dots" class="progress-dots"></span></div>
+        <div id="board" class="board" role="grid" aria-label="Crossword board"></div>
+      </div>
+      <div class="interaction">
+        <div id="candidate" class="candidate" aria-live="polite"></div>
+        <div id="wheel" class="wheel" aria-label="Letter wheel">
+          <svg class="trace" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline id="trace-line" points=""></polyline></svg>
+        </div>
+        <p id="instruction" class="instruction"></p>
+        <button id="hint" class="hint-btn" type="button">Need a hint?</button>
+      </div>
+    </section>
+  </main>
+
+  <section id="endcard" class="endcard" aria-hidden="true">
+    <div class="end-panel">
+      <div class="end-icon">🌻</div>
+      <h2 id="end-title"></h2>
+      <p id="end-copy"></p>
+      <button class="end-cta install" type="button">PLAY WORD TRAILS<small>FREE TO INSTALL</small></button>
+    </div>
+  </section>
+
+  <div id="loader">GROWING A NEW PUZZLE…</div>
+
+<script>/* inlined: ../shared/sfx.js */
+/*
+ * sfx.js — Procedural WebAudio sound engine for playable ads.
+ *
+ * Why procedural? Playable ads live under tight size budgets (2–5 MB) and must
+ * be self-contained. Synthesising SFX at runtime means zero audio files, zero
+ * extra bytes, and no decode latency — while still giving the spins, wins and
+ * coin showers the "juice" that drives engagement.
+ *
+ * Exposes a single global: window.SFX
+ */
+(function (global) {
+  'use strict';
+
+  var AC = global.AudioContext || global.webkitAudioContext;
+  var ctx = null;
+  var master = null;
+  var muted = false;
+  var suspended = false;   // ad not viewable / page hidden — no sound may play
+  var spinNodes = null;
+
+  function ensure() {
+    if (!AC) return null;
+    if (!ctx) {
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0.45;
+      master.connect(ctx.destination);
+    }
+    // Browsers start the context suspended until a user gesture — resume on demand.
+    if (ctx.state === 'suspended' && ctx.resume) ctx.resume();
+    return ctx;
+  }
+
+  // A single enveloped oscillator "blip".
+  function tone(o) {
+    if (muted || suspended) return;
+    var c = ensure();
+    if (!c) return;
+    var t0 = c.currentTime + (o.delay || 0);
+    var dur = o.dur || 0.15;
+    var osc = c.createOscillator();
+    var g = c.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(o.freq, t0);
+    if (o.freqTo) osc.frequency.exponentialRampToValueAtTime(o.freqTo, t0 + dur);
+    var vol = o.vol == null ? 0.3 : o.vol;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g);
+    g.connect(master);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.03);
+  }
+
+  // Short burst of filtered noise — used for coins / scratching.
+  function noise(o) {
+    if (muted || suspended) return;
+    var c = ensure();
+    if (!c) return;
+    var t0 = c.currentTime + (o.delay || 0);
+    var dur = o.dur || 0.2;
+    var frames = Math.floor(c.sampleRate * dur);
+    var buf = c.createBuffer(1, frames, c.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames);
+    var src = c.createBufferSource();
+    src.buffer = buf;
+    var bp = c.createBiquadFilter();
+    bp.type = o.filter || 'bandpass';
+    bp.frequency.value = o.freq || 1800;
+    bp.Q.value = o.q || 1;
+    var g = c.createGain();
+    g.gain.value = o.vol == null ? 0.25 : o.vol;
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(master);
+    src.start(t0);
+    src.stop(t0 + dur);
+  }
+
+  function arpeggio(freqs, step, type, vol) {
+    freqs.forEach(function (f, i) {
+      tone({ freq: f, freqTo: f * 1.001, type: type || 'triangle', dur: 0.18, vol: vol || 0.28, delay: i * (step || 0.09) });
+    });
+  }
+
+  var SFX = {
+    // Call once from a user gesture to satisfy autoplay policies.
+    unlock: function () { ensure(); },
+    setMuted: function (m) { muted = !!m; if (muted) this.spinStop(); },
+    toggleMuted: function () { this.setMuted(!muted); return muted; },
+    isMuted: function () { return muted; },
+
+    // Hard-silence while the ad is off-screen (MRAID viewability / page hidden).
+    // Suspending the context also halts any already-scheduled nodes (spin whir).
+    suspend: function () {
+      suspended = true;
+      if (ctx && ctx.suspend) ctx.suspend();
+    },
+    resume: function () {
+      suspended = false;
+      if (ctx && ctx.resume && ctx.state === 'suspended') ctx.resume();
+    },
+
+    click: function () { tone({ type: 'square', freq: 660, freqTo: 320, dur: 0.07, vol: 0.18 }); },
+    tick: function () { tone({ type: 'square', freq: 1000, freqTo: 520, dur: 0.035, vol: 0.13 }); },
+    reelStop: function () { tone({ type: 'sine', freq: 420, freqTo: 150, dur: 0.13, vol: 0.3 }); },
+    whoosh: function () { noise({ filter: 'bandpass', freq: 1200, q: 0.7, dur: 0.35, vol: 0.18 }); },
+
+    // Looping reel whir — start when reels spin, stop when they land.
+    spinStart: function () {
+      if (muted || suspended) return;
+      var c = ensure();
+      if (!c || spinNodes) return;
+      var osc = c.createOscillator();
+      var lfo = c.createOscillator();
+      var lfoGain = c.createGain();
+      var lp = c.createBiquadFilter();
+      var g = c.createGain();
+      osc.type = 'triangle';            // softer than sawtooth — less "white noise"
+      osc.frequency.value = 115;
+      lfo.frequency.value = 24;         // gentle mechanical flutter
+      lfoGain.gain.value = 12;
+      lp.type = 'lowpass'; lp.frequency.value = 850;   // tame the harshness
+      g.gain.value = 0.0001;
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc.frequency);
+      osc.connect(lp); lp.connect(g);
+      g.connect(master);
+      g.gain.exponentialRampToValueAtTime(0.08, c.currentTime + 0.08);
+      osc.start();
+      lfo.start();
+      spinNodes = { osc: osc, lfo: lfo, g: g };
+    },
+    spinStop: function () {
+      if (!spinNodes || !ctx) return;
+      var n = spinNodes;
+      spinNodes = null;
+      var t = ctx.currentTime;
+      n.g.gain.cancelScheduledValues(t);
+      n.g.gain.setValueAtTime(n.g.gain.value, t);
+      n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+      n.osc.stop(t + 0.14);
+      n.lfo.stop(t + 0.14);
+    },
+
+    coin: function (delay) { tone({ type: 'square', freq: 1320, freqTo: 1980, dur: 0.09, vol: 0.16, delay: delay || 0 }); tone({ type: 'square', freq: 1760, dur: 0.05, vol: 0.12, delay: (delay || 0) + 0.04 }); },
+    win: function () { arpeggio([523, 659, 784, 1047], 0.085, 'triangle', 0.3); },
+    bigWin: function () {
+      arpeggio([523, 659, 784, 1047, 1319, 1568], 0.075, 'triangle', 0.32);
+      // sparkle tail
+      for (var i = 0; i < 6; i++) tone({ type: 'sine', freq: 1568 + i * 220, dur: 0.12, vol: 0.12, delay: 0.5 + i * 0.05 });
+    },
+    lose: function () { tone({ type: 'sawtooth', freq: 300, freqTo: 110, dur: 0.4, vol: 0.22 }); },
+    // gritty, granular "scrrtch" that sweeps down with resonance — reads as a
+    // coin dragging across foil rather than a thin hiss. Randomised per stroke.
+    scratch: function () {
+      if (muted || suspended) return;
+      var c = ensure();
+      if (!c) return;
+      var t0 = c.currentTime, dur = 0.12;
+      var frames = Math.floor(c.sampleRate * dur);
+      var buf = c.createBuffer(1, frames, c.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < frames; i++) {
+        var env = 1 - i / frames;
+        var grain = 0.55 + 0.45 * Math.sin(i * 0.7);   // granular drag texture
+        d[i] = (Math.random() * 2 - 1) * env * grain;
+      }
+      var src = c.createBufferSource(); src.buffer = buf;
+      var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 4.5;
+      bp.frequency.setValueAtTime(2300 + Math.random() * 700, t0);
+      bp.frequency.exponentialRampToValueAtTime(950, t0 + dur);
+      var g = c.createGain(); g.gain.value = 0.15;
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start(t0); src.stop(t0 + dur);
+    }
+  };
+
+  global.SFX = SFX;
+})(window);
+
+</script>
+<script>/* inlined: ../shared/playable.js */
+/*
+ * playable.js — Universal playable-ad lifecycle + CTA/redirect handler.
+ *
+ * A single build often has to ship across many ad networks, each with its own
+ * "open the store" protocol and readiness signals. This module abstracts that
+ * so the game code just calls PlayableAd.install() and PlayableAd.onReady().
+ *
+ * Supported click protocols: MRAID (IAB / ironSource / AppLovin / Vungle /
+ * Mintegral), Google AdMob (ExitApi), Meta/Facebook (FbPlayableAd), Unity Ads
+ * (install_url macro), AppLovin DAPI, plus a window.open() fallback for preview.
+ *
+ * Exposes a single global: window.PlayableAd
+ */
+(function (global) {
+  'use strict';
+
+  // ── Store destinations (swap per campaign) ───────────────────────────────
+  // Delivery wrappers inject window.PLAYABLE_CONFIG with real campaign URLs.
+  // The repository defaults return browser-preview clicks to the portfolio and
+  // deliberately avoid pretending that these original concepts are store apps.
+  var CONFIG = global.PLAYABLE_CONFIG || {
+    iosUrl: 'https://apps.apple.com/us/genre/ios-games/id6014',
+    androidUrl: 'https://play.google.com/store/games',
+    previewUrl: '../'
+  };
+
+  // ── A/B variant selection ─────────────────────────────────────────────────
+  // Networks pass variant via query string (?v=b) or an injected global
+  // (window.AB_VARIANT, set by the packaging step). Defaults to 'a'.
+  function variant() {
+    try {
+      var m = /[?&]v=([\w-]+)/.exec(global.location.search);
+      return (m && m[1]) || global.AB_VARIANT || 'a';
+    } catch (e) { return 'a'; }
+  }
+
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function storeUrl() {
+    return isIOS() ? CONFIG.iosUrl : CONFIG.androidUrl;
+  }
+
+  var clickGuard = false;
+
+  function install() {
+    if (clickGuard) return;           // debounce rapid double-taps
+    clickGuard = true;
+    setTimeout(function () { clickGuard = false; }, 700);
+
+    var url = storeUrl();
+    track('cta_click');
+    try {
+      if (typeof mraid !== 'undefined' && mraid.open) {            // MRAID family
+        mraid.open(url);
+      } else if (typeof FbPlayableAd !== 'undefined') {            // Meta / Facebook
+        FbPlayableAd.onCTAClick();
+      } else if (global.ExitApi && global.ExitApi.exit) {          // Google AdMob / Ads
+        global.ExitApi.exit();
+      } else if (global.dapi && global.dapi.openStoreUrl) {        // AppLovin DAPI
+        global.dapi.openStoreUrl(url);
+      } else if (typeof global.install_url !== 'undefined') {      // Unity Ads macro
+        global.open(global.install_url, '_blank');
+      } else if (global.mintegral && global.mintegral.openUrl) {   // Mintegral
+        global.mintegral.openUrl(url);
+      } else {
+        global.open(CONFIG.previewUrl || url, '_blank');           // portfolio preview
+      }
+    } catch (e) {
+      global.open(CONFIG.previewUrl || url, '_blank');
+    }
+  }
+
+  // ── Readiness ─────────────────────────────────────────────────────────────
+  // Fire cb once the DOM is parsed AND (if present) MRAID reports ready.
+  function onReady(cb) {
+    function domReady(fn) {
+      if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(fn, 0);
+      else document.addEventListener('DOMContentLoaded', fn);
+    }
+    domReady(function () {
+      if (typeof mraid === 'undefined') { wirePauseSources(); cb(); return; }
+      if (mraid.getState && mraid.getState() === 'loading') {
+        mraid.addEventListener('ready', function () { wirePauseSources(); cb(); });
+      } else {
+        wirePauseSources();
+        cb();
+      }
+    });
+  }
+
+  // Pause/resume the game when the ad scrolls out of / into view (MRAID viewability).
+  function onViewableChange(cb) {
+    if (typeof mraid === 'undefined' || !mraid.addEventListener) return;
+    mraid.addEventListener('viewableChange', cb);
+  }
+
+  // ── Unified pause bus ──────────────────────────────────────────────────────
+  // Ad networks preload playables off-screen and swipe them in/out of view;
+  // a compliant playable must not run or make sound while hidden. This folds
+  // MRAID viewability and the Page Visibility API into one signal.
+  var paused = false;
+  var pausedAt = 0;
+  var totalPaused = 0;
+  var pauseCbs = [];
+
+  // Shared gameplay clock + timers. Native setTimeout/setInterval continue while
+  // an ad is preloaded off-screen, which can skip an interaction or reveal an
+  // end card before the player sees the game. These helpers freeze with the
+  // same lifecycle signal used by rendering and audio.
+  var timerId = 0;
+  var timers = [];
+  function realNow() { return global.performance && performance.now ? performance.now() : Date.now(); }
+  function now() {
+    var n = realNow();
+    return n - totalPaused - (paused ? n - pausedAt : 0);
+  }
+  function schedule(fn, ms, repeat) {
+    var task = { id: ++timerId, at: now() + ms, ms: ms, repeat: !!repeat, fn: fn };
+    timers.push(task);
+    return task.id;
+  }
+  function delay(fn, ms) { return schedule(fn, ms, false); }
+  function every(fn, ms) { return schedule(fn, ms, true); }
+  function cancelTimer(id) {
+    for (var i = timers.length - 1; i >= 0; i--) if (timers[i].id === id) timers.splice(i, 1);
+  }
+  (function timerFrame() {
+    if (!paused) {
+      var n = now();
+      for (var i = timers.length - 1; i >= 0; i--) {
+        var task = timers[i];
+        if (n < task.at) continue;
+        if (task.repeat) task.at = n + task.ms;
+        else timers.splice(i, 1);
+        try { task.fn(); } catch (e) { if (global.console && console.error) console.error(e); }
+      }
+    }
+    global.requestAnimationFrame(timerFrame);
+  })();
+
+  function setPaused(p) {
+    p = !!p;
+    if (p === paused) return;
+    if (p) pausedAt = realNow();
+    else { totalPaused += realNow() - pausedAt; pausedAt = 0; }
+    paused = p;
+    track(p ? 'paused' : 'resumed');
+    for (var i = 0; i < pauseCbs.length; i++) {
+      try { pauseCbs[i](p); } catch (e) { /* one bad cb must not break the rest */ }
+    }
+  }
+
+  function onPauseChange(cb) {
+    pauseCbs.push(cb);
+    // Late subscribers (games created after MRAID ready) must inherit an
+    // initial not-viewable state instead of waiting for the next transition.
+    if (paused) {
+      try { cb(true); } catch (e) { if (global.console && console.error) console.error(e); }
+    }
+  }
+  function isPaused() { return paused; }
+
+  function wirePauseSources() {
+    document.addEventListener('visibilitychange', function () {
+      setPaused(document.hidden);
+    });
+    if (typeof mraid !== 'undefined' && mraid.addEventListener) {
+      mraid.addEventListener('viewableChange', function (viewable) {
+        setPaused(!viewable);
+      });
+      // some SDKs report not-viewable at start (ad preloaded off-screen)
+      if (mraid.isViewable && !mraid.isViewable()) setPaused(true);
+    }
+  }
+
+  // Lightweight analytics hook — wire to the network's event API in production.
+  function track(event, data) {
+    try {
+      if (global.console && console.log) console.log('[playable] ' + event, data || '');
+      // e.g. ironSource: if (global.ssa) ssa.trackEvent(event);
+    } catch (e) { /* no-op */ }
+  }
+
+  global.PlayableAd = {
+    config: CONFIG,
+    install: install,
+    onReady: onReady,
+    onViewableChange: onViewableChange,
+    onPauseChange: onPauseChange,
+    isPaused: isPaused,
+    variant: variant,
+    track: track,
+    now: now,
+    delay: delay,
+    every: every,
+    cancelTimer: cancelTimer,
+    isIOS: isIOS,
+    storeUrl: storeUrl
+  };
+})(window);
+
+</script>
+  <script id="creative-config" type="application/json">{"$schema":"./creative.schema.json","id":"word-trails","title":"Word Trails","version":1,"timing":{"hintDelayMs":3200,"endCardDelayMs":1300},"variants":{"a":{"hook":"Bring the garden back to life","instruction":"Swipe the letters to find each word","letters":["P","L","A","N","T"],"rows":6,"cols":5,"words":[{"text":"PLAN","cells":[[2,0],[3,0],[4,0],[5,0]]},{"text":"ANT","cells":[[2,2],[3,2],[4,2]]},{"text":"PLANT","cells":[[2,0],[2,1],[2,2],[2,3],[2,4]]}],"endTitle":"The garden is growing!","endCopy":"Discover peaceful word puzzles and beautiful new landscapes."},"b":{"hook":"Turn every word into a new view","instruction":"Connect letters to complete the trail","letters":["S","T","O","N","E"],"rows":6,"cols":5,"words":[{"text":"TONE","cells":[[2,1],[3,1],[4,1],[5,1]]},{"text":"ONE","cells":[[2,2],[3,2],[4,2]]},{"text":"STONE","cells":[[2,0],[2,1],[2,2],[2,3],[2,4]]}],"endTitle":"A new trail awaits!","endCopy":"Relax with satisfying word puzzles wherever you go."}}}</script>
+<script>/* inlined: game.js */
+/*
+ * Word Trails — adaptive DOM/CSS playable ad.
+ *
+ * The creative and level data live in creative.json so producers can change a
+ * hook, word set or funnel without editing interaction code. The source demo
+ * loads that file; build.js embeds the exact same JSON into the single-file ad.
+ */
+(function () {
+  'use strict';
+
+  var config, creative;
+  var board = document.getElementById('board');
+  var wheel = document.getElementById('wheel');
+  var candidate = document.getElementById('candidate');
+  var traceLine = document.getElementById('trace-line');
+  var selected = [];
+  var letterButtons = [];
+  var found = {};
+  var selecting = false;
+  var locked = false;
+  var hintGeneration = 0;
+  var cellByKey = {};
+
+  // A small pause-aware scheduler keeps funnel transitions from completing while
+  // an ad is hidden. It replaces gameplay setTimeout calls and survives an
+  // orientation change without resetting state.
+  var scheduled = [];
+  var schedulerPaused = false;
+  var pausedAt = 0;
+  function after(ms, fn) { scheduled.push({ at: performance.now() + ms, fn: fn }); }
+  function schedulerFrame(now) {
+    if (!schedulerPaused) {
+      for (var i = scheduled.length - 1; i >= 0; i--) {
+        if (now >= scheduled[i].at) {
+          var task = scheduled.splice(i, 1)[0];
+          try { task.fn(); } catch (e) { setTimeout(function () { throw e; }, 0); }
+        }
+      }
+    }
+    requestAnimationFrame(schedulerFrame);
+  }
+  requestAnimationFrame(schedulerFrame);
+
+  function loadCreative(done) {
+    var el = document.getElementById('creative-config');
+    var embedded = el.textContent.replace(/^\s+|\s+$/g, '');
+    if (embedded) {
+      try { done(null, JSON.parse(embedded)); } catch (e) { done(e); }
+      return;
+    }
+    fetch(el.getAttribute('data-src'))
+      .then(function (r) { if (!r.ok) throw new Error('Creative config returned ' + r.status); return r.json(); })
+      .then(function (data) { done(null, data); })
+      .catch(function (err) { done(err); });
+  }
+
+  function boot(data) {
+    config = data;
+    creative = config.variants[PlayableAd.variant()] || config.variants.a;
+    if (!creative) throw new Error('No playable variant is configured');
+
+    document.getElementById('hook').textContent = creative.hook;
+    document.getElementById('instruction').textContent = creative.instruction;
+    document.getElementById('end-title').textContent = creative.endTitle;
+    document.getElementById('end-copy').textContent = creative.endCopy;
+
+    buildBoard();
+    buildProgress();
+    buildWheel();
+    wireControls();
+    resetHintTimer();
+
+    document.getElementById('loader').classList.add('hide');
+    PlayableAd.track('game_loaded', {
+      game: config.id,
+      variant: PlayableAd.variant(),
+      orientation: window.innerWidth > window.innerHeight ? 'landscape' : 'portrait'
+    });
+  }
+
+  function buildBoard() {
+    var lettersAt = {};
+    creative.words.forEach(function (word) {
+      if (word.cells.length !== word.text.length) throw new Error('Cell count mismatch for ' + word.text);
+      word.cells.forEach(function (pos, i) {
+        var key = pos[0] + ':' + pos[1];
+        if (lettersAt[key] && lettersAt[key] !== word.text.charAt(i)) throw new Error('Conflicting letter at ' + key);
+        lettersAt[key] = word.text.charAt(i);
+      });
+    });
+
+    board.style.gridTemplateColumns = 'repeat(' + creative.cols + ', 1fr)';
+    board.style.gridTemplateRows = 'repeat(' + creative.rows + ', 1fr)';
+    board.style.aspectRatio = creative.cols + ' / ' + creative.rows;
+    for (var row = 0; row < creative.rows; row++) {
+      for (var col = 0; col < creative.cols; col++) {
+        var key = row + ':' + col;
+        var cell = document.createElement('div');
+        cell.className = lettersAt[key] ? 'cell' : 'cell empty';
+        cell.setAttribute('role', 'gridcell');
+        cell.setAttribute('aria-label', lettersAt[key] ? 'Hidden letter' : '');
+        cell.dataset.letter = lettersAt[key] || '';
+        board.appendChild(cell);
+        cellByKey[key] = cell;
+      }
+    }
+  }
+
+  function buildProgress() {
+    var wrap = document.getElementById('progress-dots');
+    creative.words.forEach(function (_, i) {
+      var dot = document.createElement('span');
+      dot.className = 'progress-dot';
+      dot.dataset.index = i;
+      wrap.appendChild(dot);
+    });
+  }
+
+  function buildWheel() {
+    var count = creative.letters.length;
+    creative.letters.forEach(function (letter, i) {
+      var angle = -Math.PI / 2 + i * Math.PI * 2 / count;
+      var x = 50 + Math.cos(angle) * 34;
+      var y = 50 + Math.sin(angle) * 34;
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'letter';
+      button.textContent = letter;
+      button.dataset.index = i;
+      button.dataset.x = x;
+      button.dataset.y = y;
+      button.setAttribute('aria-label', 'Letter ' + letter);
+      button.style.left = x + '%';
+      button.style.top = y + '%';
+      button.addEventListener('pointerdown', beginSelection);
+      wheel.appendChild(button);
+      letterButtons.push(button);
+    });
+  }
+
+  function beginSelection(e) {
+    if (locked || selecting) return;
+    e.preventDefault();
+    SFX.unlock();
+    selecting = true;
+    selected = [];
+    candidate.className = 'candidate';
+    addLetter(e.currentTarget);
+    resetHintTimer();
+    PlayableAd.track('word_swipe_started');
+  }
+
+  function onPointerMove(e) {
+    if (!selecting) return;
+    e.preventDefault();
+    var hit = document.elementFromPoint(e.clientX, e.clientY);
+    if (!hit) return;
+    var button = hit.closest ? hit.closest('.letter') : null;
+    if (button && wheel.contains(button)) addLetter(button);
+  }
+
+  function addLetter(button) {
+    var index = Number(button.dataset.index);
+    if (selected.indexOf(index) !== -1) return;
+    selected.push(index);
+    button.classList.add('selected');
+    button.classList.remove('hinted');
+    SFX.tick();
+    redrawSelection();
+  }
+
+  function redrawSelection() {
+    var text = '';
+    var points = [];
+    selected.forEach(function (index) {
+      var b = letterButtons[index];
+      text += creative.letters[index];
+      points.push(b.dataset.x + ',' + b.dataset.y);
+    });
+    candidate.textContent = text;
+    traceLine.setAttribute('points', points.join(' '));
+  }
+
+  function finishSelection() {
+    if (!selecting) return;
+    selecting = false;
+    var text = selected.map(function (i) { return creative.letters[i]; }).join('');
+    var match = null;
+    for (var i = 0; i < creative.words.length; i++) {
+      if (creative.words[i].text === text && !found[text]) { match = creative.words[i]; break; }
+    }
+    if (match) acceptWord(match, i);
+    else rejectWord(text);
+  }
+
+  function acceptWord(word, wordIndex) {
+    locked = true;
+    found[word.text] = true;
+    candidate.textContent = word.text;
+    candidate.className = 'candidate success';
+    SFX.win();
+
+    word.cells.forEach(function (pos, i) {
+      var cell = cellByKey[pos[0] + ':' + pos[1]];
+      cell.textContent = word.text.charAt(i);
+      cell.setAttribute('aria-label', 'Letter ' + word.text.charAt(i));
+      cell.classList.remove('just-revealed');
+      // force a fresh animation when a crossing word reuses this square
+      void cell.offsetWidth;
+      cell.classList.add('just-revealed');
+    });
+
+    document.querySelector('.progress-dot[data-index="' + wordIndex + '"]').classList.add('done');
+    var complete = Object.keys(found).length;
+    var flowers = document.querySelectorAll('.flower');
+    if (flowers[complete - 1]) flowers[complete - 1].classList.add('bloom');
+    PlayableAd.track('word_found', { word: word.text, number: complete });
+
+    after(560, function () {
+      clearSelection();
+      locked = false;
+      if (complete === creative.words.length) completePuzzle();
+      else resetHintTimer();
+    });
+  }
+
+  function rejectWord(text) {
+    candidate.textContent = text.length > 1 ? 'TRY AGAIN' : 'KEEP SWIPING';
+    candidate.className = 'candidate error';
+    SFX.lose();
+    PlayableAd.track('word_rejected', { letters: text });
+    after(430, clearSelection);
+    resetHintTimer();
+  }
+
+  function clearSelection() {
+    selected = [];
+    letterButtons.forEach(function (b) { b.classList.remove('selected'); });
+    traceLine.setAttribute('points', '');
+    candidate.textContent = '';
+    candidate.className = 'candidate';
+  }
+
+  function completePuzzle() {
+    locked = true;
+    candidate.textContent = 'GARDEN COMPLETE!';
+    candidate.className = 'candidate success';
+    SFX.bigWin();
+    PlayableAd.track('puzzle_complete');
+    after(config.timing.endCardDelayMs, showEndCard);
+  }
+
+  function showEndCard() {
+    var endcard = document.getElementById('endcard');
+    endcard.classList.add('show');
+    endcard.setAttribute('aria-hidden', 'false');
+    PlayableAd.track('endcard_shown');
+  }
+
+  function showHint() {
+    var next = null;
+    for (var i = 0; i < creative.words.length; i++) {
+      if (!found[creative.words[i].text]) { next = creative.words[i]; break; }
+    }
+    if (!next) return;
+    var first = creative.letters.indexOf(next.text.charAt(0));
+    if (first >= 0) {
+      letterButtons[first].classList.remove('hinted');
+      void letterButtons[first].offsetWidth;
+      letterButtons[first].classList.add('hinted');
+    }
+    candidate.textContent = 'START WITH ' + next.text.charAt(0);
+    candidate.className = 'candidate';
+    PlayableAd.track('hint_used', { wordLength: next.text.length });
+  }
+
+  function resetHintTimer() {
+    var generation = ++hintGeneration;
+    after(config.timing.hintDelayMs, function () {
+      if (generation === hintGeneration && !selecting && !locked) showHint();
+    });
+  }
+
+  function wireControls() {
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', finishSelection);
+    window.addEventListener('pointercancel', finishSelection);
+    document.getElementById('hint').addEventListener('click', function () { hintGeneration++; showHint(); });
+    document.getElementById('mute').addEventListener('click', function () {
+      var muted = SFX.toggleMuted();
+      this.textContent = muted ? '🔇' : '🔊';
+      this.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.install'), function (button) {
+      button.addEventListener('click', function () { PlayableAd.install(); });
+    });
+
+    var orientation = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+    window.addEventListener('resize', function () {
+      var next = window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+      if (next !== orientation) {
+        orientation = next;
+        PlayableAd.track('orientation_changed', { orientation: next });
+      }
+    });
+
+    PlayableAd.onPauseChange(function (paused) {
+      schedulerPaused = paused;
+      document.body.classList.toggle('paused', paused);
+      if (paused) {
+        pausedAt = performance.now();
+        SFX.suspend();
+      } else {
+        var delta = performance.now() - pausedAt;
+        scheduled.forEach(function (task) { task.at += delta; });
+        pausedAt = 0;
+        SFX.resume();
+      }
+    });
+  }
+
+  PlayableAd.onReady(function () {
+    loadCreative(function (err, data) {
+      if (err) {
+        document.getElementById('loader').textContent = 'CREATIVE CONFIG ERROR';
+        console.error(err);
+        return;
+      }
+      try { boot(data); }
+      catch (e) {
+        document.getElementById('loader').textContent = 'PLAYABLE SETUP ERROR';
+        console.error(e);
+      }
+    });
+  });
+})();
+
+</script>
+</body>
+</html>

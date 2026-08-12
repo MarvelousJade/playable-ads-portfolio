@@ -1,0 +1,25 @@
+name: Build and test playables
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  playable-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playable-test-screenshots
+          path: thumbnails/*-end.png

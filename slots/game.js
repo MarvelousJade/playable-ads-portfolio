@@ -158,7 +158,6 @@
       this.buildSpinButton();
       this.buildAttract();
       this.buildInstallPill();
-      this.buildTicker();
 
       // Unlock audio on first interaction.
       this.input.once('pointerdown', function () { SFX.unlock(); });
@@ -340,16 +339,6 @@
       pill.setSize(150, 54);
       pill.setInteractive(new Phaser.Geom.Rectangle(-75, -27, 150, 54), Phaser.Geom.Rectangle.Contains);
       pill.on('pointerdown', function () { PlayableAd.install(); });
-    },
-
-    // ── Social-proof winners ticker ────────────────────────────────────────────
-    buildTicker: function () {
-      var t = this.add.text(24, H - 44, PlayableAd.socialFeed(), {
-        fontFamily: 'Arial', fontSize: '22px', color: '#c9bfe6'
-      }).setOrigin(0, 0.5).setAlpha(0.85).setDepth(90);
-      this.time.addEvent({ delay: 2600, loop: true, callback: function () {
-        t.setText(PlayableAd.socialFeed());
-      } });
     },
 
     onSpinPressed: function () {
@@ -562,8 +551,7 @@
       PlayableAd.track('endcard_shown');
       if (this.megaBanner) { this.megaBanner.destroy(); this.megaBanner = null; }
       var overlay = this.add.container(0, 0).setDepth(80);
-      var dim = this.add.rectangle(0, 0, W, H, 0x05030c, 0.92).setOrigin(0).setInteractive();
-      dim.on('pointerdown', function () { PlayableAd.install(); });
+      var dim = this.add.rectangle(0, 0, W, H, 0x05030c, 0.92).setOrigin(0);
       overlay.add(dim);
 
       var title = this.add.text(W / 2, 360, 'LUCKY VEGAS', {

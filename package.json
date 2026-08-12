@@ -1,14 +1,26 @@
 {
   "name": "playable-ads-portfolio",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Adaptive, network-ready HTML5 playable ads with a validated single-file build pipeline.",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "serve": "node serve.js",
+    "validate": "node tools/validate-creatives.js",
+    "build": "npm run validate && node build.js",
+    "test": "npm run build && node test.js",
+    "test:smoke": "node test.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "playable-ads",
+    "html5",
+    "javascript",
+    "adaptive-layout",
+    "mraid",
+    "phaser",
+    "pixi"
+  ],
+  "author": "MarvelousJade",
+  "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
     "playwright": "^1.61.0"

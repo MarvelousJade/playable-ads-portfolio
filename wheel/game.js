@@ -164,7 +164,7 @@
 
     // blink bulbs
     var phase = 0;
-    setInterval(function () {
+    PlayableAd.every(function () {
       phase++;
       for (var i = 0; i < wheel.bulbs.length; i++) {
         wheel.bulbs[i].tint = (i + phase) % 2 ? 0xffe27a : 0xff5a3c;
@@ -351,7 +351,7 @@
     app.stage.addChild(t);
     animate(450, function (x) { return 1 + 2.2 * Math.pow(x - 1, 3) + 1.2 * Math.pow(x - 1, 2); },
       function (e) { t.scale.set(0.2 + e * 0.8); });
-    setTimeout(function () {
+    PlayableAd.delay(function () {
       animate(500, function (x) { return x; }, function (e) { t.alpha = 1 - e; t.y = CY - e * 80; },
         function () { t.destroy(); });
     }, 900);
@@ -359,10 +359,10 @@
 
   // ── Coin shower ─────────────────────────────────────────────────────────────
   function startCoins(duration) {
-    var spawnUntil = performance.now() + duration;
+    var spawnUntil = PlayableAd.now() + duration;
     app.ticker.add(coinTick);
-    var spawner = setInterval(function () {
-      if (performance.now() > spawnUntil) { clearInterval(spawner); return; }
+    var spawner = PlayableAd.every(function () {
+      if (PlayableAd.now() > spawnUntil) { PlayableAd.cancelTimer(spawner); return; }
       for (var i = 0; i < 4; i++) {
         var c = new PIXI.Sprite(coinTex); c.anchor.set(0.5);
         c.x = Math.random() * W; c.y = -40;
@@ -391,7 +391,7 @@
     SFX.bigWin();
     startCoins(2500);
     popup(outcome.label, 0xffd23c);
-    setTimeout(showEndCard, 2400);
+    PlayableAd.delay(showEndCard, 2400);
   }
 
   function showEndCard() {
@@ -399,8 +399,6 @@
     var overlay = new PIXI.Container();
     var dim = new PIXI.Graphics();
     dim.beginFill(0x05030c, 0.84).drawRect(0, 0, W, H).endFill();
-    dim.eventMode = 'static'; dim.cursor = 'pointer';
-    dim.on('pointerdown', function () { PlayableAd.install(); });
     overlay.addChild(dim);
 
     var title = txt('SPIN TO WIN', 72, 0xffe27a, '900'); title.anchor.set(0.5); title.x = CX; title.y = 360;
@@ -437,12 +435,6 @@
     var pill = makeButton('INSTALL', null, 170, 56, 0x2bd659, function () { PlayableAd.install(); });
     pill.x = W - 24 - 85; pill.y = H - 24 - 28;
     app.stage.addChild(pill);
-
-    // social-proof winners ticker
-    var feed = txt(PlayableAd.socialFeed(), 20, 0xc9bfe6, '400');
-    feed.anchor.set(0, 0.5); feed.x = 24; feed.y = H - 48; feed.alpha = 0.85;
-    app.stage.addChild(feed);
-    setInterval(function () { feed.text = PlayableAd.socialFeed(); }, 2600);
 
     fit();
     window.addEventListener('resize', fit);

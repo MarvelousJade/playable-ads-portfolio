@@ -20,8 +20,9 @@ const ROOT = __dirname;
 const DIST = path.join(ROOT, 'dist');
 
 const GAMES = {
-  slots:   { title: 'Lucky Vegas Slots (Phaser 3)',  assets: ['cherry', 'lemon', 'bell', 'star', 'gem', 'coin'] },
-  wheel:   { title: 'Spin to Win (Pixi.js)',         assets: [] },   // fully procedural art
+  word:    { title: 'Word Trails (adaptive DOM/CSS)', assets: [] },
+  slots:   { title: 'Lucky Vegas Slots (Phaser 3)',   assets: ['cherry', 'lemon', 'bell', 'star', 'gem', 'coin'] },
+  wheel:   { title: 'Spin to Win (Pixi.js)',          assets: [] },   // fully procedural art
   scratch: { title: 'Lucky Scratch (vanilla Canvas)', assets: ['cherry', 'lemon', 'bell', 'star', 'gem', 'coin'] }
 };
 
@@ -38,7 +39,15 @@ function build(name, cfg) {
   const dir = path.join(ROOT, name);
   let html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
 
-  // 1. inline every <script src> (vendor engine, shared modules, game code)
+  // 1. inline producer-authored JSON configs. Keeping the source config in a
+  // separate validated file makes iteration easy; network output stays one file.
+  html = html.replace(/<script id="creative-config" type="application\/json" data-src="([^"]+)"><\/script>/g, (m, src) => {
+    const json = JSON.parse(fs.readFileSync(path.resolve(dir, src), 'utf8'));
+    const safe = JSON.stringify(json).replace(/</g, '\\u003c');
+    return '<script id="creative-config" type="application/json">' + safe + '</script>';
+  });
+
+  // 2. inline every <script src> (vendor engine, shared modules, game code)
   html = html.replace(/[ \t]*<script src="([^"]+)"><\/script>/g, (m, src) => {
     let js = fs.readFileSync(path.resolve(dir, src), 'utf8');
     // '</script' inside JS would close the tag early for the HTML parser
@@ -46,7 +55,7 @@ function build(name, cfg) {
     return '<script>/* inlined: ' + src + ' */\n' + js + '\n</script>';
   });
 
-  // 2. inject the art as data URIs ahead of the game code
+  // 3. inject the art as data URIs ahead of the game code
   if (cfg.assets.length) {
     const map = {};
     for (const k of cfg.assets) map[k] = dataUri(path.join(ROOT, 'assets', k + '.png'));

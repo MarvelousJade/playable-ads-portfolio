@@ -1339,9 +1339,13 @@ void main(void)\r
   'use strict';
 
   // ── Store destinations (swap per campaign) ───────────────────────────────
-  var CONFIG = {
-    iosUrl: 'https://apps.apple.com/app/id000000000',
-    androidUrl: 'https://play.google.com/store/apps/details?id=com.example.socialcasino'
+  // Delivery wrappers inject window.PLAYABLE_CONFIG with real campaign URLs.
+  // The repository defaults return browser-preview clicks to the portfolio and
+  // deliberately avoid pretending that these original concepts are store apps.
+  var CONFIG = global.PLAYABLE_CONFIG || {
+    iosUrl: 'https://apps.apple.com/us/genre/ios-games/id6014',
+    androidUrl: 'https://play.google.com/store/games',
+    previewUrl: '../'
   };
 
   // ── A/B variant selection ─────────────────────────────────────────────────
@@ -1386,10 +1390,10 @@ void main(void)\r
       } else if (global.mintegral && global.mintegral.openUrl) {   // Mintegral
         global.mintegral.openUrl(url);
       } else {
-        global.open(url, '_blank');                                // preview / web fallback
+        global.open(CONFIG.previewUrl || url, '_blank');           // portfolio preview
       }
     } catch (e) {
-      global.open(url, '_blank');
+      global.open(CONFIG.previewUrl || url, '_blank');
     }
   }
 
@@ -1422,11 +1426,50 @@ void main(void)\r
   // a compliant playable must not run or make sound while hidden. This folds
   // MRAID viewability and the Page Visibility API into one signal.
   var paused = false;
+  var pausedAt = 0;
+  var totalPaused = 0;
   var pauseCbs = [];
+
+  // Shared gameplay clock + timers. Native setTimeout/setInterval continue while
+  // an ad is preloaded off-screen, which can skip an interaction or reveal an
+  // end card before the player sees the game. These helpers freeze with the
+  // same lifecycle signal used by rendering and audio.
+  var timerId = 0;
+  var timers = [];
+  function realNow() { return global.performance && performance.now ? performance.now() : Date.now(); }
+  function now() {
+    var n = realNow();
+    return n - totalPaused - (paused ? n - pausedAt : 0);
+  }
+  function schedule(fn, ms, repeat) {
+    var task = { id: ++timerId, at: now() + ms, ms: ms, repeat: !!repeat, fn: fn };
+    timers.push(task);
+    return task.id;
+  }
+  function delay(fn, ms) { return schedule(fn, ms, false); }
+  function every(fn, ms) { return schedule(fn, ms, true); }
+  function cancelTimer(id) {
+    for (var i = timers.length - 1; i >= 0; i--) if (timers[i].id === id) timers.splice(i, 1);
+  }
+  (function timerFrame() {
+    if (!paused) {
+      var n = now();
+      for (var i = timers.length - 1; i >= 0; i--) {
+        var task = timers[i];
+        if (n < task.at) continue;
+        if (task.repeat) task.at = n + task.ms;
+        else timers.splice(i, 1);
+        try { task.fn(); } catch (e) { if (global.console && console.error) console.error(e); }
+      }
+    }
+    global.requestAnimationFrame(timerFrame);
+  })();
 
   function setPaused(p) {
     p = !!p;
     if (p === paused) return;
+    if (p) pausedAt = realNow();
+    else { totalPaused += realNow() - pausedAt; pausedAt = 0; }
     paused = p;
     track(p ? 'paused' : 'resumed');
     for (var i = 0; i < pauseCbs.length; i++) {
@@ -1434,7 +1477,14 @@ void main(void)\r
     }
   }
 
-  function onPauseChange(cb) { pauseCbs.push(cb); }
+  function onPauseChange(cb) {
+    pauseCbs.push(cb);
+    // Late subscribers (games created after MRAID ready) must inherit an
+    // initial not-viewable state instead of waiting for the next transition.
+    if (paused) {
+      try { cb(true); } catch (e) { if (global.console && console.error) console.error(e); }
+    }
+  }
   function isPaused() { return paused; }
 
   function wirePauseSources() {
@@ -1448,16 +1498,6 @@ void main(void)\r
       // some SDKs report not-viewable at start (ad preloaded off-screen)
       if (mraid.isViewable && !mraid.isViewable()) setPaused(true);
     }
-  }
-
-  // ── Social-proof winners feed ──────────────────────────────────────────────
-  // Top playables (e.g. Blackout Bingo) show a rotating "X just won Y" strip.
-  // Deterministic off the clock so all engines just render the same string.
-  var FEED_NAMES = ['Mia', 'Jake', 'Ana', 'Leo', 'Zoe', 'Sam', 'Ivy', 'Max', 'Eva', 'Tom'];
-  function socialFeed() {
-    var i = Math.floor(Date.now() / 2600) % FEED_NAMES.length;
-    var amt = 2000 + ((i * 7919) % 23) * 500;
-    return '🎉 ' + FEED_NAMES[i] + ' just won ' + amt.toLocaleString() + ' coins!';
   }
 
   // Lightweight analytics hook — wire to the network's event API in production.
@@ -1476,8 +1516,11 @@ void main(void)\r
     onPauseChange: onPauseChange,
     isPaused: isPaused,
     variant: variant,
-    socialFeed: socialFeed,
     track: track,
+    now: now,
+    delay: delay,
+    every: every,
+    cancelTimer: cancelTimer,
     isIOS: isIOS,
     storeUrl: storeUrl
   };
@@ -1651,7 +1694,7 @@ void main(void)\r
 
     // blink bulbs
     var phase = 0;
-    setInterval(function () {
+    PlayableAd.every(function () {
       phase++;
       for (var i = 0; i < wheel.bulbs.length; i++) {
         wheel.bulbs[i].tint = (i + phase) % 2 ? 0xffe27a : 0xff5a3c;
@@ -1838,7 +1881,7 @@ void main(void)\r
     app.stage.addChild(t);
     animate(450, function (x) { return 1 + 2.2 * Math.pow(x - 1, 3) + 1.2 * Math.pow(x - 1, 2); },
       function (e) { t.scale.set(0.2 + e * 0.8); });
-    setTimeout(function () {
+    PlayableAd.delay(function () {
       animate(500, function (x) { return x; }, function (e) { t.alpha = 1 - e; t.y = CY - e * 80; },
         function () { t.destroy(); });
     }, 900);
@@ -1846,10 +1889,10 @@ void main(void)\r
 
   // ── Coin shower ─────────────────────────────────────────────────────────────
   function startCoins(duration) {
-    var spawnUntil = performance.now() + duration;
+    var spawnUntil = PlayableAd.now() + duration;
     app.ticker.add(coinTick);
-    var spawner = setInterval(function () {
-      if (performance.now() > spawnUntil) { clearInterval(spawner); return; }
+    var spawner = PlayableAd.every(function () {
+      if (PlayableAd.now() > spawnUntil) { PlayableAd.cancelTimer(spawner); return; }
       for (var i = 0; i < 4; i++) {
         var c = new PIXI.Sprite(coinTex); c.anchor.set(0.5);
         c.x = Math.random() * W; c.y = -40;
@@ -1878,7 +1921,7 @@ void main(void)\r
     SFX.bigWin();
     startCoins(2500);
     popup(outcome.label, 0xffd23c);
-    setTimeout(showEndCard, 2400);
+    PlayableAd.delay(showEndCard, 2400);
   }
 
   function showEndCard() {
@@ -1886,8 +1929,6 @@ void main(void)\r
     var overlay = new PIXI.Container();
     var dim = new PIXI.Graphics();
     dim.beginFill(0x05030c, 0.84).drawRect(0, 0, W, H).endFill();
-    dim.eventMode = 'static'; dim.cursor = 'pointer';
-    dim.on('pointerdown', function () { PlayableAd.install(); });
     overlay.addChild(dim);
 
     var title = txt('SPIN TO WIN', 72, 0xffe27a, '900'); title.anchor.set(0.5); title.x = CX; title.y = 360;
@@ -1924,12 +1965,6 @@ void main(void)\r
     var pill = makeButton('INSTALL', null, 170, 56, 0x2bd659, function () { PlayableAd.install(); });
     pill.x = W - 24 - 85; pill.y = H - 24 - 28;
     app.stage.addChild(pill);
-
-    // social-proof winners ticker
-    var feed = txt(PlayableAd.socialFeed(), 20, 0xc9bfe6, '400');
-    feed.anchor.set(0, 0.5); feed.x = 24; feed.y = H - 48; feed.alpha = 0.85;
-    app.stage.addChild(feed);
-    setInterval(function () { feed.text = PlayableAd.socialFeed(); }, 2600);
 
     fit();
     window.addEventListener('resize', fit);

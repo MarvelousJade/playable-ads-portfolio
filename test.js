@@ -47,7 +47,12 @@ async function main() {
   const results = [];
 
   async function run(name, urlPath, drive, opts = {}) {
-    const ctx = await browser.newContext({ viewport: { width: 720, height: 1280 }, deviceScaleFactor: 1 });
+    const ctx = await browser.newContext({
+      viewport: opts.viewport || { width: 720, height: 1280 },
+      deviceScaleFactor: 1,
+      hasTouch: !!opts.hasTouch,
+      isMobile: !!opts.hasTouch
+    });
     const page = await ctx.newPage();
     page.setDefaultTimeout(20000);   // fail fast instead of hanging
     const errors = [];
@@ -109,6 +114,57 @@ async function main() {
       await page.mouse.up();
     }
   };
+  const swipeWord = async (page, word, touch = false) => {
+    const points = await page.locator('.letter').evaluateAll((buttons, wanted) => wanted.split('').map(letter => {
+      const button = buttons.find(b => b.textContent.trim() === letter);
+      if (!button) throw new Error('missing wheel letter ' + letter);
+      const r = button.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }), word);
+    if (touch) {
+      await page.evaluate(({ points }) => {
+        const event = (type, point) => new PointerEvent(type, {
+          bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true,
+          clientX: point.x, clientY: point.y, buttons: type === 'pointerup' ? 0 : 1
+        });
+        document.elementFromPoint(points[0].x, points[0].y).dispatchEvent(event('pointerdown', points[0]));
+        points.slice(1).forEach(point => window.dispatchEvent(event('pointermove', point)));
+        window.dispatchEvent(event('pointerup', points[points.length - 1]));
+      }, { points });
+    } else {
+      await page.mouse.move(points[0].x, points[0].y);
+      await page.mouse.down();
+      for (const point of points.slice(1)) await page.mouse.move(point.x, point.y, { steps: 4 });
+      await page.mouse.up();
+    }
+    await sleep(750);
+  };
+
+  const driveWord = async (page, waitLog) => {
+    await swipeWord(page, 'PLAN');
+    // Exercise the short-screen composition before rotating the same session.
+    await page.setViewportSize({ width: 320, height: 480 });
+    await sleep(250);
+    const clipped = await page.evaluate(() => [document.querySelector('.board'), document.querySelector('.wheel'), ...document.querySelectorAll('.letter')].some(el => {
+      const r = el.getBoundingClientRect();
+      return r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1;
+    }));
+    if (clipped) throw new Error('short-screen composition clipped an interaction surface');
+    // Prove an orientation change does not reset the completed word or funnel.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await sleep(350);
+    await swipeWord(page, 'ANT');
+    await swipeWord(page, 'PLANT');
+    await waitLog('endcard_shown');
+    await sleep(500);
+  };
+  const driveWordBTouch = async (page, waitLog) => {
+    await swipeWord(page, 'TONE', true);
+    await swipeWord(page, 'ONE', true);
+    await swipeWord(page, 'STONE', true);
+    await waitLog('endcard_shown');
+    await sleep(500);
+  };
 
   const driveSlots = async (page, waitLog) => {
     await tap(page, 360, 1130);                       // spin 1 → teaser win
@@ -129,11 +185,15 @@ async function main() {
 
   // Source demos
   const funnel = { expectEndcard: true };
+  await run('word', '/word/', driveWord, funnel);
   await run('slots', '/slots/', driveSlots, funnel);
   await run('wheel', '/wheel/', driveWheel, funnel);
   await run('scratch', '/scratch/', driveScratch, funnel);
 
-  // A/B variant B (slots: 3-spin funnel with a near-miss)
+  // Every B variant is exercised; Word B uses touch PointerEvents in landscape.
+  await run('word-vb', '/word/?v=b', driveWordBTouch, {
+    expectEndcard: true, viewport: { width: 844, height: 390 }, hasTouch: true
+  });
   await run('slots-vb', '/slots/?v=b', async (page, waitLog) => {
     await tap(page, 360, 1130);                       // spin 1: teaser win
     await waitLog('bonus_offered'); await sleep(500);
@@ -143,9 +203,17 @@ async function main() {
     await tap(page, 360, 1130);                       // spin 3 → jackpot
     await waitLog('endcard_shown'); await sleep(900);
   }, funnel);
+  await run('wheel-vb', '/wheel/?v=b', async (page) => {
+    await holdRelease(page, 360, 1140, 600); await sleep(7200);
+  }, funnel);
+  await run('scratch-vb', '/scratch/?v=b', driveScratch, funnel);
 
   // Single-file network builds — must run AND make zero external requests
   const dist = { singleFile: true, expectEndcard: true };
+  await run('word-dist', '/dist/word.html', async (page, waitLog) => {
+    await swipeWord(page, 'PLAN'); await swipeWord(page, 'ANT'); await swipeWord(page, 'PLANT');
+    await waitLog('endcard_shown'); await sleep(500);
+  }, dist);
   await run('slots-dist', '/dist/slots.html', driveSlots, dist);
   await run('wheel-dist', '/dist/wheel.html', driveWheel, dist);
   await run('scratch-dist', '/dist/scratch.html', driveScratch, dist);

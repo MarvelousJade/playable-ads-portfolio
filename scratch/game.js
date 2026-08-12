@@ -174,7 +174,7 @@
     c.stroke();
     c.globalCompositeOperation = 'source-over';
     last = { x: fx, y: fy };
-    var now = performance.now();
+    var now = PlayableAd.now();
     if (now - sfxThrottle > 60) { SFX.scratch(); sfxThrottle = now; }
   }
 
@@ -200,7 +200,7 @@
       var r = hitRegions[i];
       if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) { r.fn(); return; }
     }
-    if (state === 'endcard') { PlayableAd.install(); return; }
+    if (state === 'endcard') return;
     if (state === 'scratch') { scratching = true; last = null; scratchAt(p.x, p.y); }
   }
   function onMove(e) {
@@ -221,9 +221,9 @@
     if (state !== 'scratch') return;
     state = 'revealing';
     PlayableAd.track('scratch_revealed', { round: round });
-    var t0 = performance.now();
+    var t0 = PlayableAd.now();
     (function fade() {
-      foilAlpha = Math.max(0, 1 - (performance.now() - t0) / 350);
+      foilAlpha = Math.max(0, 1 - (PlayableAd.now() - t0) / 350);
       if (foilAlpha > 0) requestAnimationFrame(fade);
       else { foilAlpha = 0; win(); }
     })();
@@ -237,9 +237,9 @@
     totalWon += WIN_AMOUNT;
     if (round === 1) {
       // progression beat: unlock a second, bigger-feeling card before the CTA
-      setTimeout(startBonusRound, 1900);
+      PlayableAd.delay(startBonusRound, 1900);
     } else {
-      setTimeout(function () { state = 'endcard'; PlayableAd.track('endcard_shown'); }, 1900);
+      PlayableAd.delay(function () { state = 'endcard'; PlayableAd.track('endcard_shown'); }, 1900);
     }
   }
 
@@ -247,7 +247,7 @@
     state = 'bonusintro';
     PlayableAd.track('bonus_unlocked');
     SFX.win();
-    setTimeout(function () {
+    PlayableAd.delay(function () {
       round = 2;
       setRound(V.bonus);
       buildPrize(V.bonus.header);
@@ -259,9 +259,9 @@
   }
 
   function addWinning(amount) {
-    var from = balance, to = balance + amount, t0 = performance.now();
+    var from = balance, to = balance + amount, t0 = PlayableAd.now();
     (function up() {
-      var e = Math.min(1, (performance.now() - t0) / 1100);
+      var e = Math.min(1, (PlayableAd.now() - t0) / 1100);
       balance = Math.floor(from + (to - from) * (1 - Math.pow(1 - e, 3)));
       if (e < 1) requestAnimationFrame(up); else balance = to;
     })();
@@ -320,7 +320,7 @@
 
   function drawWinHighlight() {
     ctx.save();
-    ctx.strokeStyle = 'rgba(255,210,60,' + (0.5 + 0.5 * Math.sin(performance.now() / 150)) + ')';
+    ctx.strokeStyle = 'rgba(255,210,60,' + (0.5 + 0.5 * Math.sin(PlayableAd.now() / 150)) + ')';
     ctx.lineWidth = 7;
     for (var k = 0; k < WIN_CELLS.length; k++) {
       var r = cellRect(WIN_CELLS[k]);
@@ -389,15 +389,11 @@
     hitRegions = [];
     if (state === 'endcard') {
       drawEndCard();
-      hitRegions.push({ x: 0, y: 0, w: W, h: H, fn: function () { PlayableAd.install(); } });
+      hitRegions.push({ x: W / 2 - 220, y: 905, w: 440, h: 124, fn: function () { PlayableAd.install(); } });
     } else {
-      // persistent install CTA + social-proof ticker (like top-performing ads)
+      // persistent install CTA; only the visible button is an install target
       drawButton(W - 24 - 150, H - 24 - 54, 150, 54, '#2bd659', 'INSTALL');
       hitRegions.push({ x: W - 24 - 150, y: H - 24 - 54, w: 150, h: 54, fn: function () { PlayableAd.install(); } });
-      ctx.fillStyle = 'rgba(201,191,230,0.85)'; ctx.font = '400 20px Arial';
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(PlayableAd.socialFeed(), 24, H - 48);
-      ctx.textAlign = 'center';
     }
     // mute is always tappable
     hitRegions.push({ x: W - 92, y: 64, w: 64, h: 64, fn: function () { muted = SFX.toggleMuted(); } });
