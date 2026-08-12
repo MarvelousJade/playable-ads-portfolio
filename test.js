@@ -48,6 +48,10 @@ async function main() {
   const results = [];
 
   async function run(name, urlPath, drive, opts = {}) {
+    if (process.env.TEST_FILTER && !name.includes(process.env.TEST_FILTER)) return;
+    // CI adds an explicit test flag so particle-heavy framework demos can lower
+    // visual load under SwiftShader without changing production behavior.
+    const runPath = process.env.CI ? urlPath + (urlPath.includes('?') ? '&' : '?') + 'test=1' : urlPath;
     const ctx = await browser.newContext({
       viewport: opts.viewport || { width: 720, height: 1280 },
       deviceScaleFactor: 1,
@@ -66,7 +70,7 @@ async function main() {
     page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
     page.on('request', r => {
       const u = r.url();
-      if (u !== base + urlPath && !u.startsWith('data:') && !u.includes('favicon')) extraRequests.push(u);
+      if (u !== base + runPath && !u.startsWith('data:') && !u.includes('favicon')) extraRequests.push(u);
     });
     // wait until the game logs a given analytics event (robust vs cold-start slowness)
     const waitLog = async (needle, ms = 15000, minimum = 1) => {
@@ -78,7 +82,7 @@ async function main() {
       throw new Error(`timeout waiting for "${needle}" (${minimum} occurrence${minimum === 1 ? '' : 's'})`);
     };
     try {
-      await page.goto(base + urlPath, { waitUntil: 'load' });
+      await page.goto(base + runPath, { waitUntil: 'load' });
       // Cold software-rendered CI runners can need several seconds to parse an
       // embedded engine. Never send the first interaction before the game says
       // it is ready.

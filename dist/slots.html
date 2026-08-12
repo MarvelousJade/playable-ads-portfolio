@@ -439,6 +439,9 @@
 
   // ── Layout (portrait base resolution; Scale.FIT letterboxes to any screen) ──
   var W = 720, H = 1280;
+  // SwiftShader CI runners can render particle-heavy Phaser frames far slower
+  // than wall time. Test mode preserves the funnel while reducing visual load.
+  var TEST_MODE = /[?&]test=1(?:&|$)/.test(window.location.search);
   var TILE = 180;                 // symbol cell size
   var COL_X = [180, 360, 540];    // reel centre x
   var REEL_W = 168;               // symbol draw width
@@ -575,6 +578,10 @@
       this.scriptIndex = 0;
       this.freeSpins = SCRIPT.length;
       this.reels = [];
+      if (TEST_MODE) {
+        this.time.timeScale = 4;
+        this.tweens.timeScale = 4;
+      }
 
       SYMBOLS.forEach(function (s, i) { makeSymbolTexture(self, s, i); });
 
@@ -707,7 +714,7 @@
         x: { min: WIN_LEFT, max: WIN_RIGHT },
         speedY: { min: 250, max: 520 }, speedX: { min: -140, max: 140 },
         accelerationY: 700, lifespan: 2200, scale: { min: 0.06, max: 0.12 },
-        rotate: { min: 0, max: 360 }, quantity: 3, frequency: 45, emitting: false
+        rotate: { min: 0, max: 360 }, quantity: TEST_MODE ? 1 : 3, frequency: TEST_MODE ? 120 : 45, emitting: false
       });
       this.coins.setDepth(50);
     },
@@ -908,7 +915,7 @@
       PlayableAd.track('bonus_pick');
       this.tweens.add({ targets: chest, scale: 1.5, angle: { from: -8, to: 8 }, duration: 160, yoyo: true, repeat: 1 });
       chest.setText('💰');
-      this.coins.explode(24, chest.x, chest.y);
+      this.coins.explode(TEST_MODE ? 2 : 24, chest.x, chest.y);
       SFX.win();
       this.addWinning(BONUS);
       this.flashText('+' + BONUS.toLocaleString() + ' BONUS!', '#ffd23c');
@@ -935,7 +942,7 @@
 
     addWinning: function (amount) {
       var self = this;
-      this.coins.explode(40, W / 2, WIN_TOP + WIN_H / 2);
+      this.coins.explode(TEST_MODE ? 3 : 40, W / 2, WIN_TOP + WIN_H / 2);
       var from = balance;
       balance += amount;
       var o = { v: from };
