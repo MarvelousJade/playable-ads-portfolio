@@ -1,11 +1,18 @@
 # Adaptive HTML5 Playable Ads — Portfolio
 
+[![Build and test playables](https://github.com/MarvelousJade/playable-ads-portfolio/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MarvelousJade/playable-ads-portfolio/actions/workflows/ci.yml)
+[![Live portfolio](https://img.shields.io/badge/live-play_portfolio-2db86d)](https://marvelousjade.github.io/playable-ads-portfolio/)
+
 Four lightweight playable ads built end-to-end: interaction design, animation,
 creative configuration, lifecycle handling, single-file packaging and automated
 QA. The featured project focuses on the word/puzzle loop; supporting work shows
-breadth across Phaser, Pixi.js and raw Canvas.
+breadth across Phaser, Pixi.js and raw Canvas. The production workflow combines
+AI-assisted iteration with deterministic validation rather than shipping runtime
+AI dependencies.
 
-**Live portfolio:** https://marvelousjade.github.io/playable-ads-portfolio/
+**[Play the portfolio](https://marvelousjade.github.io/playable-ads-portfolio/)** ·
+**[Featured Word Trails demo](https://marvelousjade.github.io/playable-ads-portfolio/word/)** ·
+**[AI workflow](AI_WORKFLOW.md)** · **[Case study](word/CASE_STUDY.md)**
 
 | Demo | Implementation | Production focus | Build (gzip) |
 |---|---|---|---:|
@@ -32,8 +39,10 @@ Its composition **rearranges instead of letterboxing**:
   height-constrained;
 - orientation can change mid-funnel without resetting completed words.
 
-The same code handles mouse and touch through Pointer Events. Safe-area insets,
-responsive typography and reduced-motion preferences are included. See the
+The same code handles mouse and touch through Pointer Events. Its hint system
+progressively supplies the starting letter and then each next character instead
+of repeating one clue. Safe-area insets, responsive typography and reduced-motion
+preferences are included. See the
 [conversion case study](word/CASE_STUDY.md).
 
 ## How the portfolio maps to playable-ad production

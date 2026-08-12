@@ -41,6 +41,7 @@ async function main() {
       '--enable-webgl', '--autoplay-policy=no-user-gesture-required']
   });
   const shots = path.join(ROOT, 'thumbnails');
+  const captureAll = !process.env.CI; // full visual refresh locally; failures only in CI
   if (!fs.existsSync(shots)) fs.mkdirSync(shots);
 
   let failures = 0;
@@ -68,20 +69,25 @@ async function main() {
       if (u !== base + urlPath && !u.startsWith('data:') && !u.includes('favicon')) extraRequests.push(u);
     });
     // wait until the game logs a given analytics event (robust vs cold-start slowness)
-    const waitLog = async (needle, ms = 15000) => {
+    const waitLog = async (needle, ms = 15000, minimum = 1) => {
       const t0 = Date.now();
       while (Date.now() - t0 < ms) {
-        if (logs.some(l => l.includes(needle))) return;
+        if (logs.filter(l => l.includes(needle)).length >= minimum) return;
         await sleep(150);
       }
-      throw new Error(`timeout waiting for "${needle}"`);
+      throw new Error(`timeout waiting for "${needle}" (${minimum} occurrence${minimum === 1 ? '' : 's'})`);
     };
     try {
       await page.goto(base + urlPath, { waitUntil: 'load' });
-      await sleep(1600);
-      await page.screenshot({ path: path.join(shots, name + '.png') });   // identity shot → landing thumb
+      // Cold software-rendered CI runners can need several seconds to parse an
+      // embedded engine. Never send the first interaction before the game says
+      // it is ready.
+      if (opts.expectEndcard) await waitLog('game_loaded', 30000);
+      else await sleep(500);
+      await sleep(350);
+      if (captureAll) await page.screenshot({ path: path.join(shots, name + '.png') });
       await drive(page, waitLog);
-      await page.screenshot({ path: path.join(shots, name + '-end.png') });
+      if (captureAll) await page.screenshot({ path: path.join(shots, name + '-end.png') });
     } catch (e) {
       errors.push('THROW: ' + e.message);
     }
@@ -95,7 +101,13 @@ async function main() {
       errors.push('FUNNEL INCOMPLETE: end card never shown');
     }
     const ok = errors.length === 0;
-    if (!ok) failures++;
+    if (!ok) {
+      failures++;
+      if (!captureAll) {
+        try { await page.screenshot({ path: path.join(shots, name + '-end.png') }); }
+        catch (_) { /* the page may already have closed after a fatal error */ }
+      }
+    }
     results.push({ name, ok, errors });
     console.log(`\n[${ok ? 'PASS' : 'FAIL'}] ${name}`);
     errors.forEach(e => console.log('   · ' + e));
@@ -170,13 +182,27 @@ async function main() {
     await sleep(500);
   };
 
+  // Software-rendered CI can occasionally drop the first pointer transition on
+  // a newly-created Phaser canvas. Confirm the analytics event and retry the
+  // gesture instead of waiting for a funnel event that can never arrive.
+  const pressSlotSpin = async (page, waitLog, spinNumber) => {
+    let lastError;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await tap(page, 360, 1130);
+      try {
+        await waitLog('[playable] spin', 3500, spinNumber);
+        return;
+      } catch (error) { lastError = error; }
+    }
+    throw lastError;
+  };
   const driveSlots = async (page, waitLog) => {
-    await tap(page, 360, 1130);                       // spin 1 → teaser win
-    await waitLog('bonus_offered'); await sleep(500); // chest overlay up
-    await tap(page, 360, 655);                        // pick middle chest
-    await waitLog('bonus_pick'); await sleep(1600);   // bonus paid, spin re-enabled
-    await tap(page, 360, 1130);                       // spin 2 → jackpot
-    await waitLog('endcard_shown'); await sleep(900); // end card faded in
+    await pressSlotSpin(page, waitLog, 1);             // spin 1 → teaser win
+    await waitLog('bonus_offered', 30000); await sleep(500);
+    await tap(page, 360, 655);                         // pick middle chest
+    await waitLog('bonus_pick'); await sleep(1600);    // bonus paid, spin re-enabled
+    await pressSlotSpin(page, waitLog, 2);             // spin 2 → jackpot
+    await waitLog('endcard_shown', 30000); await sleep(900);
   };
   const driveWheel = async (page) => {
     await holdRelease(page, 360, 1140, 600); await sleep(6000);   // charge+spin 1
@@ -199,13 +225,13 @@ async function main() {
     expectEndcard: true, viewport: { width: 844, height: 390 }, hasTouch: true
   });
   await run('slots-vb', '/slots/?v=b', async (page, waitLog) => {
-    await tap(page, 360, 1130);                       // spin 1: teaser win
-    await waitLog('bonus_offered'); await sleep(500);
-    await tap(page, 360, 655);                        // pick middle chest
+    await pressSlotSpin(page, waitLog, 1);             // spin 1: teaser win
+    await waitLog('bonus_offered', 30000); await sleep(500);
+    await tap(page, 360, 655);                         // pick middle chest
     await waitLog('bonus_pick'); await sleep(1600);
-    await tap(page, 360, 1130); await sleep(3800);    // spin 2: near-miss
-    await tap(page, 360, 1130);                       // spin 3 → jackpot
-    await waitLog('endcard_shown'); await sleep(900);
+    await pressSlotSpin(page, waitLog, 2); await sleep(3800); // near-miss
+    await pressSlotSpin(page, waitLog, 3);             // spin 3 → jackpot
+    await waitLog('endcard_shown', 30000); await sleep(900);
   }, funnel);
   await run('wheel-vb', '/wheel/?v=b', async (page) => {
     await holdRelease(page, 360, 1140, 600); await sleep(7200);
